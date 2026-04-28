@@ -1,0 +1,34 @@
+{
+  "version": "yangliu-live-v1",
+  "generatedAt": null,
+  "grid": {
+    "latStart": -89,
+    "latEnd": 89,
+    "lonStart": -180,
+    "lonEnd": 178,
+    "latStep": 2,
+    "lonStep": 2,
+    "latCount": 90,
+    "lonCount": 180
+  },
+  "fields": {
+    "uCurrent": [],
+    "vCurrent": [],
+    "sst": [],
+    "windU": [],
+    "windV": []
+  },
+  "times": {
+    "current": null,
+    "sst": null,
+    "wind": null
+  },
+  "sources": [],
+  "errors": [
+    {
+      "key": "data",
+      "label": "Live data workflow",
+      "message": "GitHub Actions has not generated live data yet."
+    }
+  ]
+}

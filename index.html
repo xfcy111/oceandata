@@ -544,7 +544,7 @@
     <div id="scenarioPanel" class="section mode-panel" hidden>
       <h3 class="title">情境模式：实时公开数据</h3>
       <div id="scenarioMessage">尚未加载实时数据。</div>
-      <div class="metric"><span>主数据源</span><b id="scenarioSource">NOAA CoastWatch ERDDAP</b></div>
+      <div class="metric"><span>主数据源</span><b id="scenarioSource">GitHub Actions live JSON</b></div>
       <div class="metric"><span>数据时间</span><b id="scenarioTime">--</b></div>
       <div class="metric"><span>采样网格</span><b id="scenarioGrid">--</b></div>
       <div class="row">
@@ -609,43 +609,39 @@
     const MARKER_ALTITUDE = 1.052;
     const Y_AXIS = new THREE.Vector3(0, 1, 0);
     const REQUEST_TIMEOUT_MS = 30000;
+    const LIVE_DATA_URLS = [
+      "https://xfcy111.github.io/oceandata/data/yangliu-live-v1.json",
+      "./data/yangliu-live-v1.json"
+    ];
+    const LIVE_DATA_PRODUCTS = [
+      {
+        key: "current",
+        label: "NOAA RTOFS Global surface current",
+        variables: ["uCurrent", "vCurrent"],
+        units: "m/s",
+        description: "GitHub Actions 预处理的 RTOFS f000 全球表层流，2° 规则网格。"
+      },
+      {
+        key: "sst",
+        label: "NOAA RTOFS surface temperature fallback",
+        variables: ["sst"],
+        units: "degC",
+        description: "首版使用 RTOFS 表层温度作为 SST 兜底；后续可替换为 NOAA OISST。"
+      },
+      {
+        key: "wind",
+        label: "NOAA GFS f000 10m wind",
+        variables: ["windU", "windV"],
+        units: "m/s",
+        description: "GitHub Actions 预处理的 GFS 分析时次 10m 风，不读取未来预报时次。"
+      }
+    ];
     const FLOW_FRAME_SECONDS = 0.04;
     const FLOW_MAX_PARTICLE_AGE = 100;
     const FLOW_ALTITUDE = 1.078;
     const FLOW_MAX_CURRENT_SPEED = 0.7;
     const SST_TEXTURE_WIDTH = 720;
     const SST_TEXTURE_HEIGHT = 360;
-    const ERDDAP_SOURCES = {
-      current: {
-        key: "current",
-        label: "NOAA CoastWatch Sea Surface Currents",
-        url: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDNRTcurrentsDaily.json?u_current[(last)][(-89.875):8:(89.875)][(-179.875):8:(179.875)],v_current[(last)][(-89.875):8:(89.875)][(-179.875):8:(179.875)]",
-        page: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDNRTcurrentsDaily.html",
-        variables: ["u_current", "v_current"],
-        units: "m/s",
-        description: "近实时卫星高度计地转表层流，全球 0.25° 产品，浏览器端降采样为约 2°。"
-      },
-      sst: {
-        key: "sst",
-        label: "NOAA Geo-polar Blended SST",
-        url: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDCsstDaily.json?analysed_sst[(last)][(-89.975):40:(89.975)][(-179.975):40:(179.975)],mask[(last)][(-89.975):40:(89.975)][(-179.975):40:(179.975)]",
-        page: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDCsstDaily.html",
-        variables: ["analysed_sst", "mask"],
-        units: "degC",
-        description: "近实时 GHRSST/Geo-polar blended 海表温度，全球 5 km 产品，浏览器端降采样为约 2°。"
-      },
-      wind: {
-        key: "wind",
-        label: "NOAA NCEI Blended 10m Winds",
-        url: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBlendedWinds6hr.json?u_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],v_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],mask[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)]",
-        fallbackUrl: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBlendedWindsDaily.json?u_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],v_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],windspeed[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],mask[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)]",
-        page: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBlendedWinds6hr.html",
-        variables: ["u_wind", "v_wind", "mask"],
-        units: "m/s",
-        description: "10m 海面风矢量，优先 6 小时产品，失败时尝试日平均产品。"
-      }
-    };
-
     const state = {
       mode: "teaching",
       teachingView: "3d",
@@ -660,7 +656,7 @@
       resourceStatus: {
         runtime: { status: "ok", message: "Three.js 与 OrbitControls 已通过模块导入。" },
         texture: { status: "pending", message: "正在加载在线地球贴图。" },
-        erddap: {}
+        liveData: {}
       }
     };
 
@@ -1130,213 +1126,133 @@
       state.scenarioLoading = true;
       state.scenarioFailed = false;
       state.scenarioErrors = [];
-      state.scenarioMessage = "正在读取 NOAA CoastWatch ERDDAP 最新公开观测/分析场...";
-      Object.values(ERDDAP_SOURCES).forEach((source) => {
-        state.resourceStatus.erddap[source.key] = {
-          status: "loading",
-          label: source.label,
-          message: "正在请求 ERDDAP JSONP 数据...",
-          page: source.page,
-          requestUrl: source.url
-        };
-      });
+      state.scenarioMessage = "正在读取 GitHub Actions 预处理的最新公开海洋数据...";
+      state.resourceStatus.liveData = {
+        status: "loading",
+        label: "yangliu-live-v1.json",
+        message: "正在请求远程 JSON 网格...",
+        requestUrl: LIVE_DATA_URLS[0]
+      };
       updateScenarioMessage();
       clearScenarioVisuals();
 
-      const entries = await Promise.allSettled([
-        loadErddapLayer(ERDDAP_SOURCES.current),
-        loadErddapLayer(ERDDAP_SOURCES.sst),
-        loadErddapLayer(ERDDAP_SOURCES.wind)
-      ]);
-
-      const layers = {};
-      const errors = [];
-      entries.forEach((entry, index) => {
-        const source = [ERDDAP_SOURCES.current, ERDDAP_SOURCES.sst, ERDDAP_SOURCES.wind][index];
-        if (entry.status === "fulfilled") {
-          layers[source.key] = entry.value;
-        } else {
-          errors.push({ key: source.key, label: source.label, message: entry.reason?.message || String(entry.reason) });
-        }
-      });
-
-      state.scenarioLoading = false;
-      state.scenarioErrors = errors;
-      const layerCount = Object.keys(layers).length;
-      if (!layerCount) {
+      try {
+        const liveJson = await fetchLiveDataJson();
+        state.scenarioData = createScenarioData(liveJson);
+        state.scenarioErrors = liveJson.errors || [];
+        state.scenarioFailed = !state.scenarioData.sources.length;
+        state.scenarioMessage = state.scenarioFailed
+          ? "外部实时数据暂不可用：JSON 已读取，但没有任何成功图层。"
+          : buildScenarioStatusText(state.scenarioData);
+        state.resourceStatus.liveData = {
+          status: state.scenarioFailed ? "warn" : "ok",
+          label: "yangliu-live-v1.json",
+          message: state.scenarioFailed ? "JSON 可读取，但没有成功图层。" : "远程 JSON 网格已加载。",
+          time: liveJson.generatedAt,
+          requestUrl: state.scenarioData.requestUrl
+        };
+        buildScenarioVisuals();
+      } catch (err) {
         state.scenarioData = null;
         state.scenarioFailed = true;
-        state.scenarioMessage = `公开实时数据暂不可用：${errors.map((e) => `${e.label} ${e.message}`).join("；")}`;
+        state.scenarioErrors = [{ key: "liveData", label: "yangliu-live-v1.json", message: err?.message || String(err) }];
+        state.scenarioMessage = `外部实时数据暂不可用：${err?.message || String(err)}`;
+        state.resourceStatus.liveData = {
+          status: "error",
+          label: "yangliu-live-v1.json",
+          message: err?.message || String(err),
+          requestUrl: LIVE_DATA_URLS[0]
+        };
         clearScenarioVisuals();
-      } else {
-        state.scenarioData = createScenarioData(layers, errors);
-        state.scenarioFailed = false;
-        state.scenarioMessage = buildScenarioStatusText(state.scenarioData);
-        buildScenarioVisuals();
+      } finally {
+        state.scenarioLoading = false;
       }
       updateScenarioMessage();
       renderSources();
       refreshLayerVisibility();
     }
 
-    async function loadErddapLayer(source) {
-      try {
-        return await loadErddapLayerFromUrl(source, source.url, source.label);
-      } catch (err) {
-        if (!source.fallbackUrl) {
-          state.resourceStatus.erddap[source.key] = {
-            status: "error",
-            label: source.label,
-            message: err?.message || String(err),
-            page: source.page,
-            requestUrl: source.url
-          };
-          throw err;
-        }
-        console.warn(`${source.label} primary source failed; trying fallback`, err);
+    async function fetchLiveDataJson() {
+      const errors = [];
+      for (const url of LIVE_DATA_URLS) {
         try {
-          return await loadErddapLayerFromUrl(source, source.fallbackUrl, `${source.label} Daily`);
-        } catch (fallbackErr) {
-          state.resourceStatus.erddap[source.key] = {
-            status: "error",
-            label: `${source.label} Daily`,
-            message: fallbackErr?.message || String(fallbackErr),
-            page: source.page,
-            requestUrl: source.fallbackUrl
-          };
-          throw fallbackErr;
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const json = await response.json();
+          if (json?.version !== "yangliu-live-v1") throw new Error("JSON 版本不是 yangliu-live-v1");
+          json.__requestUrl = url;
+          return json;
+        } catch (err) {
+          errors.push(`${url}: ${err?.message || String(err)}`);
         }
       }
+      throw new Error(errors.join("；"));
     }
 
-    async function loadErddapLayerFromUrl(source, url, label) {
-      const json = await fetchErddapJsonp(url, REQUEST_TIMEOUT_MS);
-      const layer = createGridLayer(json, { ...source, label, requestUrl: url });
-      if (!layer.validCount) throw new Error("返回成功，但有效海洋格点为空");
-      state.resourceStatus.erddap[source.key] = {
-        status: "ok",
-        label,
-        message: `已加载 ${layer.validCount} 个有效格点。`,
-        time: layer.time,
-        page: source.page,
-        requestUrl: url
-      };
-      return layer;
-    }
-
-    function fetchErddapJsonp(url, timeoutMs) {
-      return new Promise((resolve, reject) => {
-        const callback = `__erddapCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const script = document.createElement("script");
-        const separator = url.includes("?") ? "&" : "?";
-        let done = false;
-        const cleanup = () => {
-          delete window[callback];
-          script.remove();
-        };
-        const timer = setTimeout(() => {
-          if (done) return;
-          done = true;
-          cleanup();
-          reject(new Error("请求超时或 JSONP 回调未返回"));
-        }, timeoutMs);
-        window[callback] = (payload) => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          cleanup();
-          resolve(payload);
-        };
-        script.onerror = () => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          cleanup();
-          reject(new Error("网络错误或源站拒绝脚本读取"));
-        };
-        script.src = `${url}${separator}.jsonp=${callback}`;
-        document.head.appendChild(script);
-      });
-    }
-
-    function createGridLayer(json, source) {
-      const table = json?.table;
-      if (!table?.rows?.length) throw new Error("ERDDAP JSON 缺少 table.rows");
-      const columns = table.columnNames || [];
-      const latIndex = columns.indexOf("latitude");
-      const lonIndex = columns.indexOf("longitude");
-      const timeIndex = columns.indexOf("time");
-      if (latIndex < 0 || lonIndex < 0) throw new Error("ERDDAP JSON 缺少 latitude/longitude");
-
-      const fieldNames = source.variables.filter((name) => columns.includes(name));
-      if (!fieldNames.length) throw new Error(`ERDDAP JSON 缺少目标变量：${source.variables.join(", ")}`);
-      const latValues = new Map();
-      const lonValues = new Map();
-      const rows = [];
-      table.rows.forEach((row) => {
-        const lat = Number(row[latIndex]);
-        const lon = normalizeDataLon(Number(row[lonIndex]));
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-        latValues.set(coordKey(lat), lat);
-        lonValues.set(coordKey(lon), lon);
-        rows.push({ row, lat, lon });
-      });
-
-      const lats = [...latValues.values()].sort((a, b) => a - b);
-      const lons = [...lonValues.values()].sort((a, b) => a - b);
-      const latMap = new Map(lats.map((lat, index) => [coordKey(lat), index]));
-      const lonMap = new Map(lons.map((lon, index) => [coordKey(lon), index]));
-      const size = lats.length * lons.length;
+    function createGridLayerFromLive(json, product, fieldMap, time) {
+      const grid = json.grid || {};
+      const latCount = Number(grid.latCount);
+      const lonCount = Number(grid.lonCount);
+      if (!latCount || !lonCount) throw new Error("live JSON 缺少 grid.latCount/lonCount");
+      const size = latCount * lonCount;
+      const lats = Array.from({ length: latCount }, (_, i) => Number(grid.latStart) + i * Number(grid.latStep));
+      const lons = Array.from({ length: lonCount }, (_, i) => Number(grid.lonStart) + i * Number(grid.lonStep));
       const data = {};
-      fieldNames.forEach((name) => {
-        data[name] = new Float32Array(size);
-        data[name].fill(Number.NaN);
-      });
-
-      rows.forEach(({ row, lat, lon }) => {
-        const rowIndex = latMap.get(coordKey(lat));
-        const colIndex = lonMap.get(coordKey(lon));
-        if (rowIndex === undefined || colIndex === undefined) return;
-        const index = rowIndex * lons.length + colIndex;
-        fieldNames.forEach((name) => {
-          const value = Number(row[columns.indexOf(name)]);
-          data[name][index] = Number.isFinite(value) ? value : Number.NaN;
+      const fields = [];
+      Object.entries(fieldMap).forEach(([sourceName, targetName]) => {
+        const raw = json.fields?.[sourceName] || [];
+        const values = new Float32Array(size);
+        values.fill(Number.NaN);
+        raw.slice(0, size).forEach((value, index) => {
+          const n = Number(value);
+          values[index] = Number.isFinite(n) ? n : Number.NaN;
         });
+        data[targetName] = values;
+        fields.push(targetName);
       });
-
+      const source = (json.sources || []).find((item) => item.key === product.key) || {};
       const layer = {
-        key: source.key,
-        label: source.label,
+        key: product.key,
+        label: source.label || product.label,
         lats,
         lons,
-        latCount: lats.length,
-        lonCount: lons.length,
-        latStep: inferStep(lats),
-        lonStep: inferStep(lons),
+        latCount,
+        lonCount,
+        latStep: Number(grid.latStep),
+        lonStep: Number(grid.lonStep),
         minLat: lats[0],
         maxLat: lats[lats.length - 1],
         minLon: lons[0],
         maxLon: lons[lons.length - 1],
-        wrapsLon: false,
+        wrapsLon: Math.abs(Number(grid.lonStep) * lonCount - 360) <= Math.max(0.01, Number(grid.lonStep) * 1.5),
         data,
-        fields: fieldNames,
-        time: timeIndex >= 0 ? table.rows.find((row) => row?.[timeIndex])?.[timeIndex] : "",
-        page: source.page,
-        requestUrl: source.requestUrl,
-        description: source.description,
-        units: source.units,
+        fields,
+        time: source.time || time || "",
+        page: source.url || "",
+        requestUrl: json.__requestUrl || "",
+        description: source.description || product.description,
+        units: source.units || product.units,
         validCount: 0
       };
-      layer.wrapsLon = Math.abs(layer.lonStep * layer.lonCount - 360) <= Math.max(0.01, layer.lonStep * 1.5);
       layer.validCount = countLayerValid(layer);
       return layer;
     }
 
-    function createScenarioData(layers, errors) {
+    function createScenarioData(json) {
+      const products = Object.fromEntries(LIVE_DATA_PRODUCTS.map((product) => [product.key, product]));
+      const layers = {};
+      layers.current = createGridLayerFromLive(json, products.current, { uCurrent: "u_current", vCurrent: "v_current" }, json.times?.current);
+      layers.sst = createGridLayerFromLive(json, products.sst, { sst: "analysed_sst" }, json.times?.sst);
+      layers.wind = createGridLayerFromLive(json, products.wind, { windU: "u_wind", windV: "v_wind" }, json.times?.wind);
+      Object.keys(layers).forEach((key) => {
+        if (!layers[key].validCount) delete layers[key];
+      });
       const data = {
-        source: "NOAA CoastWatch ERDDAP",
+        source: "GitHub Actions live JSON",
+        requestUrl: json.__requestUrl || LIVE_DATA_URLS[0],
+        generatedAt: json.generatedAt,
         layers,
-        errors,
+        errors: json.errors || [],
         currentSeeds: layers.current ? makeVectorSeeds(layers.current, "u_current", "v_current", 0.025) : [],
         windSeeds: layers.wind ? makeVectorSeeds(layers.wind, "u_wind", "v_wind", 0.5) : []
       };
@@ -1396,7 +1312,7 @@
     function buildScenarioStatusText(data) {
       const loaded = data.sources.map((s) => `${shortLayerName(s.key)} ${formatApiTime(s.time)}`).join("；");
       const failed = data.errors.length ? `；未加载：${data.errors.map((e) => shortLayerName(e.key)).join("、")}` : "";
-      return `已加载公开最新观测/分析场：${loaded}${failed}。时间戳以源站返回为准。`;
+      return `已加载 GitHub Actions 预处理公开数据：${loaded}${failed}。粒子动画使用真实 u/v 方向并做视觉加速。`;
     }
 
     function buildScenarioVisuals() {
@@ -1890,7 +1806,7 @@
     function renderSources() {
       const scenarioSources = state.scenarioData?.sources?.map((source) => `
         <p><b>${escapeHtml(source.label)}：</b>${escapeHtml(source.description)} 变量 ${escapeHtml(source.variables)}，单位 ${escapeHtml(source.units)}，时间 ${escapeHtml(formatApiTime(source.time))}，网格 ${escapeHtml(source.grid)}，有效格点 ${source.validCount}。<a href="${source.page}" target="_blank" rel="noreferrer">数据说明</a></p>
-      `).join("") || "<p><b>情境模式：</b>尚未成功加载 NOAA CoastWatch ERDDAP 数据。</p>";
+      `).join("") || "<p><b>情境模式：</b>尚未成功加载 GitHub Actions 远程 JSON 数据。</p>";
       const scenarioErrors = state.scenarioErrors?.length
         ? `<p><b>未加载图层：</b>${state.scenarioErrors.map((err) => `${escapeHtml(err.label)}：${escapeHtml(err.message)}`).join("；")}</p>`
         : "";
@@ -1917,13 +1833,21 @@
       const items = [
         { label: "Three.js / OrbitControls", ...state.resourceStatus.runtime },
         { label: "地球贴图", ...state.resourceStatus.texture },
-        ...Object.values(ERDDAP_SOURCES).map((source) => ({
+        {
+          label: "GitHub Pages live JSON",
+          status: state.resourceStatus.liveData?.status || "pending",
+          message: state.resourceStatus.liveData?.message || "尚未请求。",
+          time: state.resourceStatus.liveData?.time,
+          url: state.resourceStatus.liveData?.requestUrl || LIVE_DATA_URLS[0],
+          page: state.resourceStatus.liveData?.requestUrl || LIVE_DATA_URLS[0]
+        },
+        ...LIVE_DATA_PRODUCTS.map((source) => ({
           label: source.label,
-          status: state.resourceStatus.erddap[source.key]?.status || "pending",
-          message: state.resourceStatus.erddap[source.key]?.message || "尚未请求。",
-          time: state.resourceStatus.erddap[source.key]?.time,
-          url: state.resourceStatus.erddap[source.key]?.requestUrl || source.url,
-          page: source.page
+          status: state.scenarioData?.layers?.[source.key] ? "ok" : state.scenarioLoading ? "loading" : "pending",
+          message: state.scenarioData?.layers?.[source.key] ? "已由远程 JSON 提供。" : "等待 live JSON 中的图层。",
+          time: state.scenarioData?.layers?.[source.key]?.time,
+          url: state.scenarioData?.layers?.[source.key]?.page || LIVE_DATA_URLS[0],
+          page: state.scenarioData?.layers?.[source.key]?.page || LIVE_DATA_URLS[0]
         }))
       ];
       return `
