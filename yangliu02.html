@@ -1,0 +1,2521 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>高中地理：双模式实时洋流地球</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #03111d;
+      --panel: rgba(5, 16, 27, 0.88);
+      --panel2: rgba(9, 26, 42, 0.82);
+      --border: rgba(142, 214, 255, 0.28);
+      --text: #eef9ff;
+      --muted: #aac5d7;
+      --accent: #5fd7ff;
+      --warm: #ff8356;
+      --cold: #42bfff;
+      --monsoon: #d88bff;
+      --ok: #77e3a0;
+      --warn: #ffd16a;
+      --bad: #ff6f6f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 12% 10%, rgba(58, 133, 169, 0.28), transparent 26%),
+        radial-gradient(circle at 86% 82%, rgba(29, 82, 103, 0.32), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid rgba(135, 207, 255, 0.38);
+      border-radius: 8px;
+      padding: 6px 10px;
+      background: rgba(21, 60, 88, 0.92);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(158, 226, 255, 0.82);
+      background: rgba(32, 83, 116, 0.96);
+    }
+
+    button.active {
+      border-color: rgba(95, 215, 255, 0.92);
+      background: rgba(42, 116, 154, 0.98);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.48;
+      transform: none;
+    }
+
+    input[type="range"] {
+      width: 150px;
+      accent-color: var(--accent);
+    }
+
+    input[type="number"],
+    select {
+      min-width: 96px;
+      padding: 6px 8px;
+      border: 1px solid rgba(135, 207, 255, 0.34);
+      border-radius: 8px;
+      background: rgba(2, 10, 19, 0.82);
+      color: var(--text);
+      outline: none;
+    }
+
+    input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+
+    a {
+      color: #a7e7ff;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    #scenarioFlowCanvas {
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    #scenarioFlowCanvas[hidden],
+    body.view-2d #scenarioFlowCanvas {
+      display: none;
+    }
+
+    body.view-2d #app {
+      visibility: hidden;
+    }
+
+    #map2dWrap {
+      position: fixed;
+      inset: 0;
+      z-index: 4;
+      display: grid;
+      place-items: center;
+      padding: 68px 22px 28px;
+      background: linear-gradient(rgba(3, 17, 29, 0.18), rgba(3, 17, 29, 0.74)), #03111d;
+    }
+
+    #map2dWrap[hidden] {
+      display: none;
+    }
+
+    #map2d {
+      width: min(95vw, 1260px);
+      height: min(74vh, 640px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #071624;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.52);
+    }
+
+    #modeBar {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      z-index: 20;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(3, 14, 25, 0.9);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.42);
+    }
+
+    #modeText {
+      min-width: 136px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    #title {
+      position: fixed;
+      left: 14px;
+      top: 14px;
+      z-index: 12;
+      width: min(410px, calc(100vw - 28px));
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 16px 44px rgba(0, 0, 0, 0.4);
+    }
+
+    #title h1 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    #title p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    #hud {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 12;
+      width: min(420px, calc(100vw - 28px));
+      max-height: calc(100vh - 28px);
+      overflow: auto;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.46);
+      transition: transform 200ms ease, opacity 160ms ease;
+    }
+
+    #hud.collapsed {
+      transform: translateX(calc(100% + 18px));
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #hudToggle {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 22;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: rgba(3, 14, 25, 0.92);
+    }
+
+    .section {
+      margin-bottom: 9px;
+      padding: 10px;
+      border: 1px solid rgba(142, 214, 255, 0.2);
+      border-radius: 8px;
+      background: var(--panel2);
+    }
+
+    .section:last-child {
+      margin-bottom: 0;
+    }
+
+    .title {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .row,
+    .metric {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 7px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric b {
+      color: #f6fcff;
+      text-align: right;
+      font-weight: 700;
+    }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px 10px;
+    }
+
+    .seg {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #d8edf8;
+      font-size: 12px;
+      user-select: none;
+      cursor: pointer;
+    }
+
+    .small {
+      margin: 6px 0 0;
+      color: #9fbfd2;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 2px 4px 2px 0;
+      padding: 3px 7px;
+      border: 1px solid rgba(142, 214, 255, 0.22);
+      border-radius: 8px;
+      background: rgba(95, 215, 255, 0.1);
+      color: #dff5ff;
+      font-size: 11px;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .mode-panel[hidden],
+    .scenario-only[hidden] {
+      display: none;
+    }
+
+    #currentDesc,
+    #oceanDesc,
+    #scenarioMessage {
+      color: #bfd9e8;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    #scenarioMessage.error {
+      color: var(--warn);
+    }
+
+    #scenarioMessage.ok {
+      color: var(--ok);
+    }
+
+    #fallbackDock {
+      position: fixed;
+      left: 14px;
+      bottom: 58px;
+      z-index: 18;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding: 7px;
+      border: 1px solid rgba(142, 214, 255, 0.26);
+      border-radius: 8px;
+      background: rgba(3, 14, 25, 0.88);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.42);
+    }
+
+    #fallbackDock[hidden] {
+      display: none;
+    }
+
+    #fallbackNote {
+      max-width: 260px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    #sourceToggle {
+      position: fixed;
+      left: 14px;
+      bottom: 14px;
+      z-index: 18;
+      border-radius: 8px;
+      background: rgba(3, 14, 25, 0.9);
+    }
+
+    #sourcePanel {
+      position: fixed;
+      left: 14px;
+      bottom: 58px;
+      z-index: 19;
+      width: min(560px, calc(100vw - 28px));
+      max-height: min(50vh, 420px);
+      overflow: auto;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(3, 14, 25, 0.94);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 18px 54px rgba(0, 0, 0, 0.46);
+      color: #cbe5f4;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    #sourcePanel[hidden] {
+      display: none;
+    }
+
+    #tooltip {
+      position: fixed;
+      z-index: 30;
+      pointer-events: none;
+      display: none;
+      max-width: 330px;
+      padding: 8px 10px;
+      border: 1px solid rgba(142, 214, 255, 0.28);
+      border-radius: 8px;
+      background: rgba(3, 14, 25, 0.9);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      color: #effbff;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    #loading {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      z-index: 60;
+      transform: translate(-50%, -50%);
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(3, 14, 25, 0.92);
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    @media (max-width: 960px) {
+      #title {
+        display: none;
+      }
+
+      #modeBar {
+        left: 10px;
+        right: 62px;
+        transform: none;
+        justify-content: center;
+      }
+
+      #modeText {
+        display: none;
+      }
+
+      #hud {
+        left: 10px;
+        right: 10px;
+        top: 64px;
+        width: auto;
+        max-height: calc(100vh - 78px);
+      }
+
+      #hudToggle {
+        right: 10px;
+      }
+
+      #map2dWrap {
+        padding: 64px 10px 22px;
+      }
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+
+<body>
+  <div id="app"></div>
+  <canvas id="scenarioFlowCanvas" hidden aria-hidden="true"></canvas>
+  <div id="map2dWrap" hidden>
+    <canvas id="map2d" aria-label="教学模式二维洋流平面图"></canvas>
+  </div>
+  <div id="loading">正在初始化双模式洋流地球...</div>
+
+  <div id="modeBar" role="group" aria-label="模式切换">
+    <button id="modeTeaching" class="active" type="button">教学模式</button>
+    <button id="modeScenario" type="button">情境模式</button>
+    <span id="modeText">教学模式 · 3D</span>
+  </div>
+
+  <div id="title">
+    <h1>中国高中地理：双模式实时洋流地球</h1>
+    <p>教学模式使用教材主洋流示意；情境模式实时调用公开网络数据，参考 earth.nullschool 的粒子流场表达，但不依赖本地情境资产包。</p>
+  </div>
+
+  <button id="hudToggle" type="button" aria-controls="hud" aria-expanded="true" title="隐藏或显示控制面板">☰</button>
+
+  <aside id="hud">
+    <div class="section">
+      <h3 class="title">运行层级</h3>
+      <div class="seg">
+        <button id="hudTeaching" class="active" type="button">教学模式</button>
+        <button id="hudScenario" type="button">情境模式</button>
+      </div>
+      <p class="small" id="modeHint">教学模式已启用，适合课堂稳定展示。</p>
+    </div>
+
+    <div class="section">
+      <h3 class="title">观察点</h3>
+      <div class="metric"><span>命中</span><b id="hitState">请指向地球</b></div>
+      <div class="metric"><span>纬度</span><b id="latRead">--</b></div>
+      <div class="metric"><span>经度</span><b id="lonRead">--</b></div>
+      <div class="metric"><span>最近城市</span><b id="nearestRead">--</b></div>
+      <div class="row"><span>定位纬度</span><input id="latInput" type="number" min="-90" max="90" step="0.001" value="39.904" /></div>
+      <div class="row"><span>定位经度</span><input id="lonInput" type="number" min="-180" max="180" step="0.001" value="116.407" /></div>
+      <div class="row"><span>校准点</span><button id="locateBtn" type="button">定位北京</button></div>
+    </div>
+
+    <div id="teachingPanel" class="section mode-panel">
+      <h3 class="title">教学模式</h3>
+      <div class="row">
+        <span>教学视图</span>
+        <span class="seg">
+          <button id="view3d" class="active" type="button">3D</button>
+          <button id="view2d" type="button">2D</button>
+        </span>
+      </div>
+      <div class="grid2">
+        <label class="toggle"><input id="showCurrents" type="checkbox" checked />显示洋流</label>
+        <label class="toggle"><input id="showNames" type="checkbox" checked />显示名称</label>
+        <label class="toggle"><input id="showGrid" type="checkbox" checked />显示经纬网</label>
+        <label class="toggle"><input id="showCities" type="checkbox" checked />参考城市</label>
+        <label class="toggle"><input id="autoRotate" type="checkbox" />慢速自转</label>
+        <label class="toggle"><input id="dayNight" type="checkbox" />昼夜光照</label>
+      </div>
+      <div class="row"><span>洋流动画</span><input id="flowSpeed" type="range" min="0" max="3" step="0.05" value="1.1" /></div>
+      <div class="row"><span>深层模式</span><button id="deepMode" type="button" disabled title="下一阶段用于秘鲁寒流和上升流案例">预留</button></div>
+      <div>
+        <span class="pill"><span class="swatch" style="background: var(--warm);"></span>暖流</span>
+        <span class="pill"><span class="swatch" style="background: var(--cold);"></span>寒流</span>
+        <span class="pill"><span class="swatch" style="background: var(--monsoon);"></span>季风洋流</span>
+      </div>
+    </div>
+
+    <div id="scenarioPanel" class="section mode-panel" hidden>
+      <h3 class="title">情境模式：实时公开数据</h3>
+      <div id="scenarioMessage">尚未加载实时数据。</div>
+      <div class="metric"><span>主数据源</span><b id="scenarioSource">NOAA CoastWatch ERDDAP</b></div>
+      <div class="metric"><span>数据时间</span><b id="scenarioTime">--</b></div>
+      <div class="metric"><span>采样网格</span><b id="scenarioGrid">--</b></div>
+      <div class="row">
+        <span>粒子密度</span>
+        <span class="seg"><input id="particleDensity" type="range" min="600" max="4200" step="100" value="1800" /><b id="particleDensityRead">1800</b></span>
+      </div>
+      <div class="row">
+        <span>流速表现</span>
+        <span class="seg"><input id="flowSpeedScale" type="range" min="0.5" max="6" step="0.1" value="2" /><b id="flowSpeedScaleRead">2.0 天/秒</b></span>
+      </div>
+      <div class="grid2">
+        <label class="toggle"><input id="showSst" type="checkbox" checked />SST 着色</label>
+        <label class="toggle"><input id="showWind" type="checkbox" />风场辅助</label>
+        <label class="toggle"><input id="showScenarioParticles" type="checkbox" checked />洋流粒子</label>
+        <label class="toggle"><input id="showScenarioArrows" type="checkbox" />方向辅助</label>
+      </div>
+      <p class="small">粒子动画为加速表现；点选读数仍为源站返回的真实速度。</p>
+      <div class="metric"><span>海流</span><b id="scenarioCurrent">--</b></div>
+      <div class="metric"><span>SST</span><b id="scenarioSst">--</b></div>
+      <div class="metric"><span>10m 风</span><b id="scenarioWind">--</b></div>
+    </div>
+
+    <div class="section">
+      <h3 class="title">四大洋与洋流说明</h3>
+      <div class="metric"><span>当前大洋</span><b id="oceanName">--</b></div>
+      <div id="oceanDesc">指向开阔海域，可显示大洋与高中地理相关说明。</div>
+    </div>
+
+    <div class="section">
+      <h3 class="title">指向洋流</h3>
+      <div class="metric"><span>名称</span><b id="currentName">--</b></div>
+      <div id="currentDesc">靠近教学模式中的彩色流线，可查看教材解释。</div>
+    </div>
+  </aside>
+
+  <div id="fallbackDock" hidden>
+    <button id="callNullschool" type="button">调用</button>
+    <button id="reloadLive" type="button">刷新</button>
+    <button id="backTeaching" type="button">返回教学</button>
+    <span id="fallbackNote">调用按钮会在新窗口打开 earth.nullschool，本页不抓取其内部接口。</span>
+  </div>
+
+  <button id="sourceToggle" type="button">数据来源</button>
+  <div id="sourcePanel" hidden>
+    <h3 class="title">数据来源与引用说明</h3>
+    <div id="sourceText"></div>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const R = 1;
+    const DEG2RAD = Math.PI / 180;
+    const RAD2DEG = 180 / Math.PI;
+    const TEXTURE_LON_OFFSET_DEG = 0;
+    const EARTH_TEXTURE_ROTATION_Y = -Math.PI / 2;
+    const CURRENT_ALTITUDE = 1.038;
+    const GRID_ALTITUDE = 1.006;
+    const MARKER_ALTITUDE = 1.052;
+    const Y_AXIS = new THREE.Vector3(0, 1, 0);
+    const REQUEST_TIMEOUT_MS = 30000;
+    const FLOW_FRAME_SECONDS = 0.04;
+    const FLOW_MAX_PARTICLE_AGE = 100;
+    const FLOW_ALTITUDE = 1.078;
+    const FLOW_MAX_CURRENT_SPEED = 0.7;
+    const SST_TEXTURE_WIDTH = 720;
+    const SST_TEXTURE_HEIGHT = 360;
+    const ERDDAP_SOURCES = {
+      current: {
+        key: "current",
+        label: "NOAA CoastWatch Sea Surface Currents",
+        url: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDNRTcurrentsDaily.json?u_current[(last)][(-89.875):8:(89.875)][(-179.875):8:(179.875)],v_current[(last)][(-89.875):8:(89.875)][(-179.875):8:(179.875)]",
+        page: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDNRTcurrentsDaily.html",
+        variables: ["u_current", "v_current"],
+        units: "m/s",
+        description: "近实时卫星高度计地转表层流，全球 0.25° 产品，浏览器端降采样为约 2°。"
+      },
+      sst: {
+        key: "sst",
+        label: "NOAA Geo-polar Blended SST",
+        url: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDCsstDaily.json?analysed_sst[(last)][(-89.975):40:(89.975)][(-179.975):40:(179.975)],mask[(last)][(-89.975):40:(89.975)][(-179.975):40:(179.975)]",
+        page: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBLENDEDCsstDaily.html",
+        variables: ["analysed_sst", "mask"],
+        units: "degC",
+        description: "近实时 GHRSST/Geo-polar blended 海表温度，全球 5 km 产品，浏览器端降采样为约 2°。"
+      },
+      wind: {
+        key: "wind",
+        label: "NOAA NCEI Blended 10m Winds",
+        url: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBlendedWinds6hr.json?u_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],v_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],mask[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)]",
+        fallbackUrl: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBlendedWindsDaily.json?u_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],v_wind[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],windspeed[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)],mask[(last)][(10)][(-89.75):8:(89.75)][(0):8:(359.75)]",
+        page: "https://coastwatch.noaa.gov/erddap/griddap/noaacwBlendedWinds6hr.html",
+        variables: ["u_wind", "v_wind", "mask"],
+        units: "m/s",
+        description: "10m 海面风矢量，优先 6 小时产品，失败时尝试日平均产品。"
+      }
+    };
+
+    const state = {
+      mode: "teaching",
+      teachingView: "3d",
+      hoverLatLon: null,
+      selectedLatLon: { lat: 39.904, lon: 116.407 },
+      scenarioLoading: false,
+      scenarioFailed: false,
+      scenarioData: null,
+      scenarioMessage: "",
+      scenarioFallbackMessage: "",
+      scenarioErrors: [],
+      resourceStatus: {
+        runtime: { status: "ok", message: "Three.js 与 OrbitControls 已通过模块导入。" },
+        texture: { status: "pending", message: "正在加载在线地球贴图。" },
+        erddap: {}
+      }
+    };
+
+    const app = document.getElementById("app");
+    const scenarioFlowCanvas = document.getElementById("scenarioFlowCanvas");
+    const map2dWrap = document.getElementById("map2dWrap");
+    const tooltip = document.getElementById("tooltip");
+    const loading = document.getElementById("loading");
+    const ui = {
+      modeTeaching: document.getElementById("modeTeaching"),
+      modeScenario: document.getElementById("modeScenario"),
+      hudTeaching: document.getElementById("hudTeaching"),
+      hudScenario: document.getElementById("hudScenario"),
+      modeText: document.getElementById("modeText"),
+      modeHint: document.getElementById("modeHint"),
+      hud: document.getElementById("hud"),
+      hudToggle: document.getElementById("hudToggle"),
+      teachingPanel: document.getElementById("teachingPanel"),
+      scenarioPanel: document.getElementById("scenarioPanel"),
+      view3d: document.getElementById("view3d"),
+      view2d: document.getElementById("view2d"),
+      hitState: document.getElementById("hitState"),
+      latRead: document.getElementById("latRead"),
+      lonRead: document.getElementById("lonRead"),
+      nearestRead: document.getElementById("nearestRead"),
+      latInput: document.getElementById("latInput"),
+      lonInput: document.getElementById("lonInput"),
+      locateBtn: document.getElementById("locateBtn"),
+      showCurrents: document.getElementById("showCurrents"),
+      showNames: document.getElementById("showNames"),
+      showGrid: document.getElementById("showGrid"),
+      showCities: document.getElementById("showCities"),
+      autoRotate: document.getElementById("autoRotate"),
+      dayNight: document.getElementById("dayNight"),
+      flowSpeed: document.getElementById("flowSpeed"),
+      map2d: document.getElementById("map2d"),
+      scenarioMessage: document.getElementById("scenarioMessage"),
+      scenarioSource: document.getElementById("scenarioSource"),
+      scenarioTime: document.getElementById("scenarioTime"),
+      scenarioGrid: document.getElementById("scenarioGrid"),
+      particleDensity: document.getElementById("particleDensity"),
+      particleDensityRead: document.getElementById("particleDensityRead"),
+      flowSpeedScale: document.getElementById("flowSpeedScale"),
+      flowSpeedScaleRead: document.getElementById("flowSpeedScaleRead"),
+      showSst: document.getElementById("showSst"),
+      showWind: document.getElementById("showWind"),
+      showScenarioParticles: document.getElementById("showScenarioParticles"),
+      showScenarioArrows: document.getElementById("showScenarioArrows"),
+      scenarioCurrent: document.getElementById("scenarioCurrent"),
+      scenarioSst: document.getElementById("scenarioSst"),
+      scenarioWind: document.getElementById("scenarioWind"),
+      oceanName: document.getElementById("oceanName"),
+      oceanDesc: document.getElementById("oceanDesc"),
+      currentName: document.getElementById("currentName"),
+      currentDesc: document.getElementById("currentDesc"),
+      fallbackDock: document.getElementById("fallbackDock"),
+      callNullschool: document.getElementById("callNullschool"),
+      reloadLive: document.getElementById("reloadLive"),
+      backTeaching: document.getElementById("backTeaching"),
+      fallbackNote: document.getElementById("fallbackNote"),
+      sourceToggle: document.getElementById("sourceToggle"),
+      sourcePanel: document.getElementById("sourcePanel"),
+      sourceText: document.getElementById("sourceText")
+    };
+
+    let scene;
+    let camera;
+    let renderer;
+    let controls;
+    let raycaster;
+    let pointer;
+    let clock;
+    let earthGroup;
+    let earth;
+    let earthMapTexture;
+    let earthBrightMaterial;
+    let earthLitMaterial;
+    let ambientLight;
+    let sunLight;
+    let graticuleGroup;
+    let cityGroup;
+    let teachingGroup;
+    let currentLineObjects = [];
+    let currentParticleObjects = [];
+    let currentLabelObjects = [];
+    let scenarioGroup;
+    let scenarioSstGroup;
+    let scenarioArrowGroup;
+    let scenarioWindGroup;
+    let scenarioParticleGroup;
+    let scenarioFlow = null;
+    let marker;
+    let hoverMarker;
+
+    const CITIES = [
+      { name: "北京", lat: 39.904, lon: 116.407 },
+      { name: "上海", lat: 31.230, lon: 121.474 },
+      { name: "广州", lat: 23.129, lon: 113.264 },
+      { name: "东京", lat: 35.676, lon: 139.650 },
+      { name: "伦敦", lat: 51.507, lon: -0.128 },
+      { name: "纽约", lat: 40.713, lon: -74.006 },
+      { name: "悉尼", lat: -33.869, lon: 151.209 },
+      { name: "利马", lat: -12.046, lon: -77.043 },
+      { name: "开普敦", lat: -33.925, lon: 18.424 }
+    ];
+
+    const TEACHING_CURRENTS = [
+      { name: "日本暖流", type: "warm", ocean: "太平洋", points: [[15, 122], [22, 124], [30, 130], [36, 140], [42, 150]], note: "又称黑潮，北太平洋西岸暖流，增温增湿，并与千岛寒流交汇形成北海道渔场。" },
+      { name: "千岛寒流", type: "cold", ocean: "太平洋", points: [[58, 165], [50, 158], [43, 150], [38, 144]], note: "来自高纬海域的寒流，南下至日本附近，与日本暖流交汇。" },
+      { name: "北太平洋暖流", type: "warm", ocean: "太平洋", points: [[40, 150], [43, 175], [45, -155], [47, -130]], note: "日本暖流向东延续，向北美西岸输送热量。" },
+      { name: "加利福尼亚寒流", type: "cold", ocean: "太平洋", points: [[46, -130], [38, -126], [30, -121], [22, -116]], note: "北太平洋东岸寒流，降温减湿，影响北美西岸气候。" },
+      { name: "北赤道暖流（太平洋）", type: "warm", ocean: "太平洋", points: [[12, -110], [12, -145], [12, 175], [12, 140], [14, 125]], note: "信风驱动的低纬暖流，自东向西流。" },
+      { name: "南赤道暖流（太平洋）", type: "warm", ocean: "太平洋", points: [[-10, -85], [-12, -125], [-14, -165], [-16, 160], [-18, 145]], note: "南太平洋低纬暖流，自东向西流。" },
+      { name: "东澳大利亚暖流", type: "warm", ocean: "太平洋", points: [[-16, 150], [-24, 153], [-32, 154], [-40, 158]], note: "南太平洋西岸暖流，沿澳大利亚东岸南下。" },
+      { name: "秘鲁寒流", type: "cold", ocean: "太平洋", points: [[-45, -78], [-35, -75], [-25, -73], [-12, -79], [-5, -82]], note: "又称洪堡寒流，上升流显著，形成秘鲁渔场，是高中地理典型案例。" },
+      { name: "墨西哥湾暖流", type: "warm", ocean: "大西洋", points: [[20, -86], [26, -80], [33, -75], [40, -62], [46, -45]], note: "北大西洋西岸强大暖流，向高纬输送热量。" },
+      { name: "北大西洋暖流", type: "warm", ocean: "大西洋", points: [[45, -45], [50, -25], [56, -10], [62, 5], [68, 20]], note: "使西欧温带海洋性气候显著，冬季较同纬度大陆东岸温和。" },
+      { name: "拉布拉多寒流", type: "cold", ocean: "大西洋", points: [[65, -55], [55, -52], [47, -50], [42, -48]], note: "北大西洋西部寒流，与墨西哥湾暖流交汇形成纽芬兰渔场。" },
+      { name: "加那利寒流", type: "cold", ocean: "大西洋", points: [[42, -16], [32, -18], [23, -20], [15, -22]], note: "北大西洋东岸寒流，影响非洲西北岸干旱环境。" },
+      { name: "巴西暖流", type: "warm", ocean: "大西洋", points: [[-10, -35], [-22, -40], [-34, -48], [-42, -52]], note: "南大西洋西岸暖流，沿巴西东岸南下。" },
+      { name: "本格拉寒流", type: "cold", ocean: "大西洋", points: [[-38, 12], [-30, 12], [-22, 12], [-15, 10]], note: "南大西洋东岸寒流，降温减湿，影响纳米布沙漠沿岸。" },
+      { name: "北印度洋季风洋流", type: "monsoon", ocean: "印度洋", points: [[6, 48], [8, 62], [10, 78], [8, 92]], note: "受季风控制，夏季大致顺时针、冬季大致逆时针，是高中地理重点。" },
+      { name: "南赤道暖流（印度洋）", type: "warm", ocean: "印度洋", points: [[-12, 105], [-13, 88], [-14, 70], [-16, 50]], note: "南印度洋低纬暖流，自东向西流。" },
+      { name: "莫桑比克暖流", type: "warm", ocean: "印度洋", points: [[-10, 43], [-17, 41], [-24, 39], [-30, 36]], note: "沿非洲东南岸南下的暖流。" },
+      { name: "西澳大利亚寒流", type: "cold", ocean: "印度洋", points: [[-38, 112], [-30, 112], [-22, 113], [-15, 116]], note: "南印度洋东岸寒流，降温减湿，影响澳大利亚西岸干燥气候。" },
+      { name: "西风漂流", type: "cold", ocean: "南大洋", points: [[-54, 25], [-55, 80], [-55, 145], [-54, -160], [-55, -95], [-54, -30]], note: "南半球中高纬受盛行西风驱动，自西向东环绕南极。" }
+    ];
+
+    const OCEAN_INFO = {
+      "太平洋": "世界面积最大的大洋，高中阶段常联系环太平洋洋流系统、秘鲁寒流和厄尔尼诺。",
+      "大西洋": "南北狭长，适合讲解墨西哥湾暖流、北大西洋暖流、拉布拉多寒流和纽芬兰渔场。",
+      "印度洋": "北部季风控制显著，北印度洋季风洋流夏顺冬逆。",
+      "北冰洋": "高纬冷水和海冰影响显著，可联系东格陵兰寒流和极地气候。",
+      "南大洋": "西风漂流环绕南极，是全球海洋环流的重要通道。"
+    };
+
+    init();
+
+    async function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x03111d);
+      scene.fog = new THREE.Fog(0x03111d, 6, 16);
+
+      camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.05, 100);
+      camera.position.set(0, 1.45, 3.25);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.domElement.style.touchAction = "none";
+      app.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.minDistance = 1.55;
+      controls.maxDistance = 7.6;
+
+      raycaster = new THREE.Raycaster();
+      pointer = new THREE.Vector2();
+      clock = new THREE.Clock();
+
+      ambientLight = new THREE.AmbientLight(0x9ec9e8, 0.88);
+      scene.add(ambientLight);
+      sunLight = new THREE.DirectionalLight(0xffffff, 2.0);
+      sunLight.position.set(4, 2, 5);
+      scene.add(sunLight);
+
+      addStars();
+      earthGroup = new THREE.Group();
+      scene.add(earthGroup);
+
+      const texture = await loadEarthTexture();
+      createEarth(texture);
+      createGraticule();
+      createCities();
+      createTeachingLayer();
+      createScenarioLayer();
+      createMarkers();
+      bindEvents();
+      renderSources();
+      locatePoint(39.904, 116.407, true);
+      refreshUi();
+
+      loading.style.display = "none";
+      animate();
+    }
+
+    async function loadEarthTexture() {
+      const loader = new THREE.TextureLoader();
+      loader.setCrossOrigin("anonymous");
+      const urls = [
+        "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg",
+        "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/land_ocean_ice_cloud_2048.jpg"
+      ];
+      for (const url of urls) {
+        try {
+          const tex = await new Promise((resolve, reject) => {
+            loader.load(url, resolve, undefined, reject);
+          });
+          tex.colorSpace = THREE.SRGBColorSpace;
+          state.resourceStatus.texture = { status: "ok", message: "在线地球贴图已加载。", url };
+          return tex;
+        } catch (err) {
+          state.resourceStatus.texture = { status: "warn", message: `贴图源失败，继续尝试备用：${err?.message || "加载失败"}`, url };
+        }
+      }
+      state.resourceStatus.texture = { status: "warn", message: "在线地球贴图不可用，已使用本页生成的简化备用贴图。", url: "" };
+      return createFallbackEarthTexture();
+    }
+
+    function createFallbackEarthTexture() {
+      const c = document.createElement("canvas");
+      c.width = 1024;
+      c.height = 512;
+      const ctx = c.getContext("2d");
+      const grad = ctx.createLinearGradient(0, 0, 0, c.height);
+      grad.addColorStop(0, "#164e78");
+      grad.addColorStop(0.5, "#0a2944");
+      grad.addColorStop(1, "#123c5c");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.fillStyle = "rgba(80, 150, 98, 0.82)";
+      [
+        [720, 150, 180, 90],
+        [485, 170, 95, 120],
+        [535, 305, 110, 82],
+        [260, 180, 110, 95],
+        [315, 310, 95, 105],
+        [835, 335, 90, 70]
+      ].forEach(([x, y, w, h]) => {
+        ctx.beginPath();
+        ctx.ellipse(x, y, w, h, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function createEarth(texture) {
+      earthMapTexture = texture;
+      const geo = new THREE.SphereGeometry(R, 128, 128);
+      earthBrightMaterial = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+      earthLitMaterial = new THREE.MeshPhongMaterial({
+        map: texture,
+        specular: new THREE.Color(0x24465f),
+        shininess: 18
+      });
+      earth = new THREE.Mesh(geo, earthBrightMaterial);
+      earth.rotation.y = EARTH_TEXTURE_ROTATION_Y;
+      earthGroup.add(earth);
+
+      const atmosphere = new THREE.Mesh(
+        new THREE.SphereGeometry(R * 1.018, 96, 96),
+        new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          vertexShader: "varying vec3 vNormal; void main(){ vNormal=normalize(normalMatrix*normal); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+          fragmentShader: "varying vec3 vNormal; void main(){ float i=pow(0.72-dot(vNormal,vec3(0.0,0.0,1.0)),2.0); gl_FragColor=vec4(0.24,0.70,1.0,i*0.28); }"
+        })
+      );
+      earthGroup.add(atmosphere);
+    }
+
+    function createGraticule() {
+      graticuleGroup = new THREE.Group();
+      for (let lat = -60; lat <= 60; lat += 15) addLatitudeLine(lat, lat === 0 ? 0xffdc8a : 0x6fb6db, lat === 0 ? 0.58 : 0.28);
+      for (let lon = -180; lon < 180; lon += 15) addLongitudeLine(lon, lon === 0 || lon === -180 ? 0xffdc8a : 0x6fb6db, lon === 0 || lon === -180 ? 0.5 : 0.22);
+      [23.5, -23.5, 66.5, -66.5].forEach((lat) => addLatitudeLine(lat, 0xffdc8a, 0.42));
+      earthGroup.add(graticuleGroup);
+    }
+
+    function addLatitudeLine(lat, color, opacity) {
+      const points = [];
+      for (let lon = -180; lon <= 180; lon += 2) points.push(geoToWorld(lat, lon, GRID_ALTITUDE));
+      graticuleGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, transparent: true, opacity })));
+    }
+
+    function addLongitudeLine(lon, color, opacity) {
+      const points = [];
+      for (let lat = -90; lat <= 90; lat += 2) points.push(geoToWorld(lat, lon, GRID_ALTITUDE));
+      graticuleGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color, transparent: true, opacity })));
+    }
+
+    function createCities() {
+      cityGroup = new THREE.Group();
+      CITIES.forEach((city) => {
+        const p = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 12), new THREE.MeshBasicMaterial({ color: 0xf2fbff }));
+        p.position.copy(geoToWorld(city.lat, city.lon, 1.045));
+        p.userData.city = city;
+        cityGroup.add(p);
+      });
+      earthGroup.add(cityGroup);
+    }
+
+    function createTeachingLayer() {
+      teachingGroup = new THREE.Group();
+      TEACHING_CURRENTS.forEach((current) => {
+        const color = currentColor(current.type);
+        const points = makeCurvePoints(current.points, CURRENT_ALTITUDE);
+        const curve = new THREE.CatmullRomCurve3(points);
+        const line = new THREE.Mesh(
+          new THREE.TubeGeometry(curve, Math.max(48, points.length * 3), current.type === "monsoon" ? 0.009 : 0.007, 8, false),
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 })
+        );
+        line.userData.current = current;
+        teachingGroup.add(line);
+        currentLineObjects.push(line);
+
+        sampleArrowPositions(points, 2).forEach(({ pos, dir }) => {
+          const arrow = createSurfaceArrow(pos, dir, color, 0.96);
+          arrow.userData.current = current;
+          teachingGroup.add(arrow);
+          currentLineObjects.push(arrow);
+        });
+
+        for (let i = 0; i < Math.max(4, Math.floor(points.length / 10)); i += 1) {
+          const particle = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 10, 10), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+          particle.userData = { current, path: points, phase: i / Math.max(4, Math.floor(points.length / 10)) };
+          teachingGroup.add(particle);
+          currentParticleObjects.push(particle);
+        }
+
+        const label = makeTextSprite(current.name, cssCanvasColor(current.type));
+        label.position.copy(points[Math.floor(points.length * 0.52)].clone().normalize().multiplyScalar(1.105));
+        label.userData.current = current;
+        teachingGroup.add(label);
+        currentLabelObjects.push(label);
+      });
+      earthGroup.add(teachingGroup);
+    }
+
+    function createScenarioLayer() {
+      scenarioGroup = new THREE.Group();
+      scenarioGroup.visible = false;
+      scenarioSstGroup = new THREE.Group();
+      scenarioArrowGroup = new THREE.Group();
+      scenarioWindGroup = new THREE.Group();
+      scenarioParticleGroup = new THREE.Group();
+      scenarioGroup.add(scenarioSstGroup, scenarioArrowGroup, scenarioWindGroup, scenarioParticleGroup);
+      earthGroup.add(scenarioGroup);
+    }
+
+    function createMarkers() {
+      marker = new THREE.Mesh(new THREE.SphereGeometry(0.022, 18, 18), new THREE.MeshBasicMaterial({ color: 0xff3636 }));
+      hoverMarker = new THREE.Mesh(new THREE.SphereGeometry(0.015, 14, 14), new THREE.MeshBasicMaterial({ color: 0x81ffde, transparent: true, opacity: 0.92 }));
+      hoverMarker.visible = false;
+      earthGroup.add(marker, hoverMarker);
+    }
+
+    function bindEvents() {
+      window.addEventListener("resize", onResize);
+      renderer.domElement.addEventListener("pointermove", onPointerMove3D);
+      renderer.domElement.addEventListener("click", onClick3D);
+      ui.map2d.addEventListener("pointermove", onPointerMove2D);
+      ui.map2d.addEventListener("click", onClick2D);
+
+      ui.hudToggle.addEventListener("click", () => {
+        const collapsed = !ui.hud.classList.contains("collapsed");
+        ui.hud.classList.toggle("collapsed", collapsed);
+        ui.hudToggle.setAttribute("aria-expanded", String(!collapsed));
+      });
+
+      [ui.modeTeaching, ui.hudTeaching].forEach((btn) => btn.addEventListener("click", () => setMode("teaching")));
+      [ui.modeScenario, ui.hudScenario].forEach((btn) => btn.addEventListener("click", () => setMode("scenario")));
+      ui.view3d.addEventListener("click", () => setTeachingView("3d"));
+      ui.view2d.addEventListener("click", () => setTeachingView("2d"));
+      ui.locateBtn.addEventListener("click", () => locatePoint(Number(ui.latInput.value), Number(ui.lonInput.value), true));
+
+      [ui.showCurrents, ui.showNames, ui.showGrid, ui.showCities, ui.showSst, ui.showWind, ui.showScenarioParticles, ui.showScenarioArrows].forEach((input) => {
+        input.addEventListener("change", refreshLayerVisibility);
+      });
+      ui.dayNight.addEventListener("change", applyDayNight);
+      ui.particleDensity.addEventListener("input", () => {
+        updateScenarioControlReadouts();
+        rebuildScenarioParticles();
+      });
+      ui.flowSpeedScale.addEventListener("input", () => {
+        updateScenarioControlReadouts();
+        clearScenarioFlowCanvas();
+      });
+      ui.reloadLive.addEventListener("click", () => loadLiveScenario({ force: true }));
+      ui.backTeaching.addEventListener("click", () => setMode("teaching"));
+      ui.callNullschool.addEventListener("click", callEarthNullschoolFallback);
+      ui.sourceToggle.addEventListener("click", () => {
+        ui.sourcePanel.hidden = !ui.sourcePanel.hidden;
+      });
+      controls.addEventListener("start", () => {
+        if (scenarioFlow) scenarioFlow.interacting = true;
+        clearScenarioFlowCanvas();
+      });
+      controls.addEventListener("change", () => {
+        if (scenarioFlow?.interacting) clearScenarioFlowCanvas();
+      });
+      controls.addEventListener("end", () => {
+        if (scenarioFlow) scenarioFlow.interacting = false;
+        clearScenarioFlowCanvas();
+      });
+    }
+
+    async function setMode(mode) {
+      state.mode = mode;
+      if (mode === "scenario") {
+        state.teachingView = "3d";
+        refreshUi();
+        refreshLayerVisibility();
+        if (!state.scenarioData && !state.scenarioLoading) {
+          loadLiveScenario({ force: false });
+        }
+      } else {
+        refreshUi();
+        refreshLayerVisibility();
+      }
+    }
+
+    function setTeachingView(view) {
+      state.mode = "teaching";
+      state.teachingView = view;
+      refreshUi();
+      refreshLayerVisibility();
+      if (view === "2d") renderTeaching2D();
+    }
+
+    function refreshUi() {
+      const teaching = state.mode === "teaching";
+      const scenario = state.mode === "scenario";
+      const twoD = teaching && state.teachingView === "2d";
+      [ui.modeTeaching, ui.hudTeaching].forEach((btn) => btn.classList.toggle("active", teaching));
+      [ui.modeScenario, ui.hudScenario].forEach((btn) => btn.classList.toggle("active", scenario));
+      ui.view3d.classList.toggle("active", teaching && state.teachingView === "3d");
+      ui.view2d.classList.toggle("active", twoD);
+      ui.teachingPanel.hidden = !teaching;
+      ui.scenarioPanel.hidden = !scenario;
+      map2dWrap.hidden = !twoD;
+      document.body.classList.toggle("view-2d", twoD);
+      ui.fallbackDock.hidden = !scenario;
+      ui.modeText.textContent = scenario ? "情境模式 · 实时公开数据" : `教学模式 · ${state.teachingView.toUpperCase()}`;
+      ui.modeHint.textContent = scenario
+        ? "情境模式不会自动跳回教学模式；实时源失败时可刷新或点击左下角调用备选。"
+        : "教学模式已启用，使用内联教材洋流数据作为课堂兜底。";
+      updateScenarioControlReadouts();
+      updateScenarioMessage();
+    }
+
+    function refreshLayerVisibility() {
+      const teaching3D = state.mode === "teaching" && state.teachingView === "3d";
+      const scenario = state.mode === "scenario";
+      teachingGroup.visible = teaching3D && ui.showCurrents.checked;
+      currentLabelObjects.forEach((label) => label.visible = teaching3D && ui.showCurrents.checked && ui.showNames.checked);
+      graticuleGroup.visible = !document.body.classList.contains("view-2d") && ui.showGrid.checked;
+      cityGroup.visible = !document.body.classList.contains("view-2d") && ui.showCities.checked;
+      scenarioGroup.visible = scenario;
+      scenarioSstGroup.visible = scenario && ui.showSst.checked;
+      scenarioWindGroup.visible = scenario && ui.showWind.checked;
+      scenarioParticleGroup.visible = false;
+      scenarioArrowGroup.visible = scenario && ui.showScenarioArrows.checked;
+      updateScenarioFlowVisibility();
+      if (state.mode === "teaching" && state.teachingView === "2d") renderTeaching2D();
+    }
+
+    async function loadLiveScenario({ force }) {
+      if (state.scenarioLoading) return;
+      if (state.scenarioData && !force) return;
+      state.scenarioLoading = true;
+      state.scenarioFailed = false;
+      state.scenarioErrors = [];
+      state.scenarioMessage = "正在读取 NOAA CoastWatch ERDDAP 最新公开观测/分析场...";
+      Object.values(ERDDAP_SOURCES).forEach((source) => {
+        state.resourceStatus.erddap[source.key] = {
+          status: "loading",
+          label: source.label,
+          message: "正在请求 ERDDAP JSONP 数据...",
+          page: source.page,
+          requestUrl: source.url
+        };
+      });
+      updateScenarioMessage();
+      clearScenarioVisuals();
+
+      const entries = await Promise.allSettled([
+        loadErddapLayer(ERDDAP_SOURCES.current),
+        loadErddapLayer(ERDDAP_SOURCES.sst),
+        loadErddapLayer(ERDDAP_SOURCES.wind)
+      ]);
+
+      const layers = {};
+      const errors = [];
+      entries.forEach((entry, index) => {
+        const source = [ERDDAP_SOURCES.current, ERDDAP_SOURCES.sst, ERDDAP_SOURCES.wind][index];
+        if (entry.status === "fulfilled") {
+          layers[source.key] = entry.value;
+        } else {
+          errors.push({ key: source.key, label: source.label, message: entry.reason?.message || String(entry.reason) });
+        }
+      });
+
+      state.scenarioLoading = false;
+      state.scenarioErrors = errors;
+      const layerCount = Object.keys(layers).length;
+      if (!layerCount) {
+        state.scenarioData = null;
+        state.scenarioFailed = true;
+        state.scenarioMessage = `公开实时数据暂不可用：${errors.map((e) => `${e.label} ${e.message}`).join("；")}`;
+        clearScenarioVisuals();
+      } else {
+        state.scenarioData = createScenarioData(layers, errors);
+        state.scenarioFailed = false;
+        state.scenarioMessage = buildScenarioStatusText(state.scenarioData);
+        buildScenarioVisuals();
+      }
+      updateScenarioMessage();
+      renderSources();
+      refreshLayerVisibility();
+    }
+
+    async function loadErddapLayer(source) {
+      try {
+        return await loadErddapLayerFromUrl(source, source.url, source.label);
+      } catch (err) {
+        if (!source.fallbackUrl) {
+          state.resourceStatus.erddap[source.key] = {
+            status: "error",
+            label: source.label,
+            message: err?.message || String(err),
+            page: source.page,
+            requestUrl: source.url
+          };
+          throw err;
+        }
+        console.warn(`${source.label} primary source failed; trying fallback`, err);
+        try {
+          return await loadErddapLayerFromUrl(source, source.fallbackUrl, `${source.label} Daily`);
+        } catch (fallbackErr) {
+          state.resourceStatus.erddap[source.key] = {
+            status: "error",
+            label: `${source.label} Daily`,
+            message: fallbackErr?.message || String(fallbackErr),
+            page: source.page,
+            requestUrl: source.fallbackUrl
+          };
+          throw fallbackErr;
+        }
+      }
+    }
+
+    async function loadErddapLayerFromUrl(source, url, label) {
+      const json = await fetchErddapJsonp(url, REQUEST_TIMEOUT_MS);
+      const layer = createGridLayer(json, { ...source, label, requestUrl: url });
+      if (!layer.validCount) throw new Error("返回成功，但有效海洋格点为空");
+      state.resourceStatus.erddap[source.key] = {
+        status: "ok",
+        label,
+        message: `已加载 ${layer.validCount} 个有效格点。`,
+        time: layer.time,
+        page: source.page,
+        requestUrl: url
+      };
+      return layer;
+    }
+
+    function fetchErddapJsonp(url, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const callback = `__erddapCallback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const script = document.createElement("script");
+        const separator = url.includes("?") ? "&" : "?";
+        let done = false;
+        const cleanup = () => {
+          delete window[callback];
+          script.remove();
+        };
+        const timer = setTimeout(() => {
+          if (done) return;
+          done = true;
+          cleanup();
+          reject(new Error("请求超时或 JSONP 回调未返回"));
+        }, timeoutMs);
+        window[callback] = (payload) => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          cleanup();
+          resolve(payload);
+        };
+        script.onerror = () => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          cleanup();
+          reject(new Error("网络错误或源站拒绝脚本读取"));
+        };
+        script.src = `${url}${separator}.jsonp=${callback}`;
+        document.head.appendChild(script);
+      });
+    }
+
+    function createGridLayer(json, source) {
+      const table = json?.table;
+      if (!table?.rows?.length) throw new Error("ERDDAP JSON 缺少 table.rows");
+      const columns = table.columnNames || [];
+      const latIndex = columns.indexOf("latitude");
+      const lonIndex = columns.indexOf("longitude");
+      const timeIndex = columns.indexOf("time");
+      if (latIndex < 0 || lonIndex < 0) throw new Error("ERDDAP JSON 缺少 latitude/longitude");
+
+      const fieldNames = source.variables.filter((name) => columns.includes(name));
+      if (!fieldNames.length) throw new Error(`ERDDAP JSON 缺少目标变量：${source.variables.join(", ")}`);
+      const latValues = new Map();
+      const lonValues = new Map();
+      const rows = [];
+      table.rows.forEach((row) => {
+        const lat = Number(row[latIndex]);
+        const lon = normalizeDataLon(Number(row[lonIndex]));
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        latValues.set(coordKey(lat), lat);
+        lonValues.set(coordKey(lon), lon);
+        rows.push({ row, lat, lon });
+      });
+
+      const lats = [...latValues.values()].sort((a, b) => a - b);
+      const lons = [...lonValues.values()].sort((a, b) => a - b);
+      const latMap = new Map(lats.map((lat, index) => [coordKey(lat), index]));
+      const lonMap = new Map(lons.map((lon, index) => [coordKey(lon), index]));
+      const size = lats.length * lons.length;
+      const data = {};
+      fieldNames.forEach((name) => {
+        data[name] = new Float32Array(size);
+        data[name].fill(Number.NaN);
+      });
+
+      rows.forEach(({ row, lat, lon }) => {
+        const rowIndex = latMap.get(coordKey(lat));
+        const colIndex = lonMap.get(coordKey(lon));
+        if (rowIndex === undefined || colIndex === undefined) return;
+        const index = rowIndex * lons.length + colIndex;
+        fieldNames.forEach((name) => {
+          const value = Number(row[columns.indexOf(name)]);
+          data[name][index] = Number.isFinite(value) ? value : Number.NaN;
+        });
+      });
+
+      const layer = {
+        key: source.key,
+        label: source.label,
+        lats,
+        lons,
+        latCount: lats.length,
+        lonCount: lons.length,
+        latStep: inferStep(lats),
+        lonStep: inferStep(lons),
+        minLat: lats[0],
+        maxLat: lats[lats.length - 1],
+        minLon: lons[0],
+        maxLon: lons[lons.length - 1],
+        wrapsLon: false,
+        data,
+        fields: fieldNames,
+        time: timeIndex >= 0 ? table.rows.find((row) => row?.[timeIndex])?.[timeIndex] : "",
+        page: source.page,
+        requestUrl: source.requestUrl,
+        description: source.description,
+        units: source.units,
+        validCount: 0
+      };
+      layer.wrapsLon = Math.abs(layer.lonStep * layer.lonCount - 360) <= Math.max(0.01, layer.lonStep * 1.5);
+      layer.validCount = countLayerValid(layer);
+      return layer;
+    }
+
+    function createScenarioData(layers, errors) {
+      const data = {
+        source: "NOAA CoastWatch ERDDAP",
+        layers,
+        errors,
+        currentSeeds: layers.current ? makeVectorSeeds(layers.current, "u_current", "v_current", 0.025) : [],
+        windSeeds: layers.wind ? makeVectorSeeds(layers.wind, "u_wind", "v_wind", 0.5) : []
+      };
+      data.currentSeedWeightTotal = data.currentSeeds.reduce((sum, seed) => sum + Math.max(0.001, seed.speed), 0);
+      data.sources = Object.values(layers).map((layer) => ({
+        key: layer.key,
+        label: layer.label,
+        time: layer.time,
+        grid: `${layer.latCount} x ${layer.lonCount}`,
+        validCount: layer.validCount,
+        page: layer.page,
+        requestUrl: layer.requestUrl,
+        variables: layer.fields.join(", "),
+        units: layer.units,
+        description: layer.description
+      }));
+      data.time = data.sources.map((s) => s.time).filter(Boolean).join(" / ");
+      return data;
+    }
+
+    function countLayerValid(layer) {
+      if (layer.key === "current") return countVectorValid(layer, "u_current", "v_current", 0.025);
+      if (layer.key === "wind") return countVectorValid(layer, "u_wind", "v_wind", 0.5);
+      const values = layer.data.analysed_sst || [];
+      let count = 0;
+      for (let i = 0; i < values.length; i += 1) if (Number.isFinite(values[i])) count += 1;
+      return count;
+    }
+
+    function countVectorValid(layer, uField, vField, minSpeed) {
+      const u = layer.data[uField] || [];
+      const v = layer.data[vField] || [];
+      let count = 0;
+      for (let i = 0; i < u.length; i += 1) {
+        if (Number.isFinite(u[i]) && Number.isFinite(v[i]) && Math.hypot(u[i], v[i]) >= minSpeed) count += 1;
+      }
+      return count;
+    }
+
+    function makeVectorSeeds(layer, uField, vField, minSpeed) {
+      const seeds = [];
+      const u = layer.data[uField] || [];
+      const v = layer.data[vField] || [];
+      for (let row = 0; row < layer.latCount; row += 1) {
+        for (let col = 0; col < layer.lonCount; col += 1) {
+          const index = row * layer.lonCount + col;
+          const east = u[index];
+          const north = v[index];
+          const speed = Math.hypot(east, north);
+          if (!Number.isFinite(east) || !Number.isFinite(north) || speed < minSpeed) continue;
+          seeds.push({ lat: layer.lats[row], lon: layer.lons[col], u: east, v: north, speed });
+        }
+      }
+      return seeds;
+    }
+
+    function buildScenarioStatusText(data) {
+      const loaded = data.sources.map((s) => `${shortLayerName(s.key)} ${formatApiTime(s.time)}`).join("；");
+      const failed = data.errors.length ? `；未加载：${data.errors.map((e) => shortLayerName(e.key)).join("、")}` : "";
+      return `已加载公开最新观测/分析场：${loaded}${failed}。时间戳以源站返回为准。`;
+    }
+
+    function buildScenarioVisuals() {
+      if (!state.scenarioData) return;
+      clearScenarioVisuals();
+      buildScenarioSst();
+      buildScenarioArrows();
+      buildScenarioWind();
+      rebuildScenarioParticles();
+      ui.scenarioSource.textContent = state.scenarioData.source;
+      ui.scenarioTime.textContent = formatScenarioTimes(state.scenarioData);
+      ui.scenarioGrid.textContent = formatScenarioGrids(state.scenarioData);
+      updateScenarioFlowVisibility();
+    }
+
+    function clearScenarioVisuals() {
+      [scenarioSstGroup, scenarioArrowGroup, scenarioWindGroup, scenarioParticleGroup].forEach(disposeGroupChildren);
+      if (scenarioFlow) scenarioFlow.resetParticles(true);
+      clearScenarioFlowCanvas();
+      ui.scenarioTime.textContent = "--";
+      ui.scenarioGrid.textContent = "--";
+      ui.scenarioCurrent.textContent = "--";
+      ui.scenarioSst.textContent = "--";
+      ui.scenarioWind.textContent = "--";
+    }
+
+    function buildScenarioSst() {
+      const layer = state.scenarioData?.layers?.sst;
+      if (!layer?.data?.analysed_sst) return;
+      const texture = createSstOverlayTexture(layer);
+      if (!texture) return;
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(R * 1.024, 128, 128),
+        new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity: 0.68,
+          depthWrite: false
+        })
+      );
+      mesh.rotation.y = EARTH_TEXTURE_ROTATION_Y;
+      scenarioSstGroup.add(mesh);
+    }
+
+    function createSstOverlayTexture(layer) {
+      const canvas = document.createElement("canvas");
+      canvas.width = SST_TEXTURE_WIDTH;
+      canvas.height = SST_TEXTURE_HEIGHT;
+      const ctx = canvas.getContext("2d", { willReadFrequently: false });
+      const image = ctx.createImageData(canvas.width, canvas.height);
+      const color = new THREE.Color();
+      let painted = 0;
+      for (let y = 0; y < canvas.height; y += 1) {
+        const v = (y + 0.5) / canvas.height;
+        for (let x = 0; x < canvas.width; x += 1) {
+          const u = (x + 0.5) / canvas.width;
+          const { lat, lon } = uvToGeo(u, v);
+          const sst = sampleLayerScalarSoft(layer, lat, lon, "analysed_sst", 0.52);
+          if (!Number.isFinite(sst)) continue;
+          sstToColor(sst, color);
+          const i = (y * canvas.width + x) * 4;
+          image.data[i] = Math.round(color.r * 255);
+          image.data[i + 1] = Math.round(color.g * 255);
+          image.data[i + 2] = Math.round(color.b * 255);
+          image.data[i + 3] = 112;
+          painted += 1;
+        }
+      }
+      if (!painted) return null;
+      ctx.putImageData(image, 0, 0);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    function buildScenarioArrows() {
+      const seeds = state.scenarioData?.currentSeeds || [];
+      const stride = Math.max(1, Math.ceil(seeds.length / 420));
+      seeds.forEach((s, idx) => {
+        if (idx % stride !== 0) return;
+        const pos = geoToWorld(s.lat, s.lon, 1.07);
+        const dir = vectorToTangent(s.lat, s.lon, s.u, s.v);
+        const scale = clamp(0.55 + s.speed / FLOW_MAX_CURRENT_SPEED, 0.55, 1.55);
+        const opacity = clamp(0.28 + s.speed / FLOW_MAX_CURRENT_SPEED * 0.42, 0.28, 0.76);
+        scenarioArrowGroup.add(createSurfaceArrow(pos, dir, 0xeafcff, opacity, scale));
+      });
+    }
+
+    function buildScenarioWind() {
+      const seeds = state.scenarioData?.windSeeds || [];
+      const stride = Math.max(1, Math.ceil(seeds.length / 360));
+      seeds.forEach((s, idx) => {
+        if (idx % stride !== 0) return;
+        const pos = geoToWorld(s.lat, s.lon, 1.105);
+        const dir = vectorToTangent(s.lat, s.lon, s.u, s.v);
+        const scale = clamp(0.5 + s.speed / 12, 0.55, 1.55);
+        const opacity = clamp(0.22 + s.speed / 18, 0.22, 0.66);
+        scenarioWindGroup.add(createSurfaceArrow(pos, dir, 0x9dffb5, opacity, scale));
+      });
+    }
+
+    function rebuildScenarioParticles() {
+      if (!scenarioFlow) setupScenarioFlowCanvas();
+      scenarioFlow.resetParticles();
+      updateScenarioControlReadouts();
+      clearScenarioFlowCanvas();
+    }
+
+    function setupScenarioFlowCanvas() {
+      scenarioFlow = scenarioFlow || new ScenarioFlowCanvas(scenarioFlowCanvas);
+      return scenarioFlow;
+    }
+
+    function resizeScenarioFlowCanvas() {
+      if (!scenarioFlow) setupScenarioFlowCanvas();
+      scenarioFlow.resize();
+    }
+
+    function clearScenarioFlowCanvas() {
+      if (!scenarioFlow) setupScenarioFlowCanvas();
+      scenarioFlow.clear();
+    }
+
+    function updateScenarioFlowVisibility() {
+      const visible = state.mode === "scenario"
+        && ui.showScenarioParticles.checked
+        && !!state.scenarioData?.layers?.current
+        && !!state.scenarioData?.currentSeeds?.length;
+      if (!scenarioFlow) setupScenarioFlowCanvas();
+      scenarioFlow.setVisible(visible);
+    }
+
+    function updateScenarioControlReadouts() {
+      if (ui.particleDensityRead) ui.particleDensityRead.textContent = String(getScenarioParticleTarget());
+      if (ui.flowSpeedScaleRead) ui.flowSpeedScaleRead.textContent = `${Number(ui.flowSpeedScale.value || 2).toFixed(1)} 天/秒`;
+    }
+
+    function getScenarioParticleTarget() {
+      const requested = Number(ui.particleDensity.value || 1800);
+      const cores = navigator.hardwareConcurrency || 4;
+      const firefox = /firefox/i.test(navigator.userAgent);
+      const cap = firefox || cores <= 4 ? 1800 : cores >= 8 ? 4200 : 2800;
+      return Math.max(400, Math.min(cap, Math.round(requested)));
+    }
+
+    function drawScenarioFlow(dt) {
+      if (!scenarioFlow) setupScenarioFlowCanvas();
+      scenarioFlow.draw(dt);
+    }
+
+    class ScenarioFlowCanvas {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext("2d");
+        this.dpr = 1;
+        this.accumulator = 0;
+        this.interacting = false;
+        this.particles = [];
+        this.clearRequested = true;
+        this.colors = [
+          "rgba(90, 166, 255, 0.30)",
+          "rgba(129, 205, 255, 0.42)",
+          "rgba(177, 238, 255, 0.58)",
+          "rgba(226, 255, 255, 0.78)",
+          "rgba(119, 255, 222, 0.92)"
+        ];
+        this.buckets = Array.from({ length: this.colors.length }, () => []);
+        this.resize();
+      }
+
+      resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.max(1, Math.floor(window.innerWidth * dpr));
+        const height = Math.max(1, Math.floor(window.innerHeight * dpr));
+        if (this.canvas.width !== width || this.canvas.height !== height || this.dpr !== dpr) {
+          this.canvas.width = width;
+          this.canvas.height = height;
+          this.dpr = dpr;
+          this.ctx.lineCap = "round";
+          this.ctx.lineJoin = "round";
+          this.ctx.lineWidth = Math.max(1, dpr);
+          this.clearRequested = true;
+        }
+      }
+
+      setVisible(visible) {
+        const hidden = !visible;
+        if (this.canvas.hidden !== hidden) {
+          this.canvas.hidden = hidden;
+          this.clear();
+        } else {
+          this.canvas.hidden = hidden;
+        }
+        if (visible && !this.particles.length) this.resetParticles();
+      }
+
+      clear() {
+        this.resize();
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.clearRequested = false;
+      }
+
+      resetParticles(empty = false) {
+        this.particles.length = 0;
+        if (empty || !state.scenarioData?.layers?.current || !state.scenarioData.currentSeeds.length) return;
+        const count = getScenarioParticleTarget();
+        for (let i = 0; i < count; i += 1) this.particles.push(this.randomizeParticle({}));
+      }
+
+      randomizeParticle(p) {
+        const seed = this.pickSeed();
+        const layer = state.scenarioData?.layers?.current;
+        if (!seed || !layer) {
+          p.lat = 0;
+          p.lon = 0;
+          p.age = FLOW_MAX_PARTICLE_AGE + 1;
+          p.maxAge = FLOW_MAX_PARTICLE_AGE;
+          p.bucket = 0;
+          return p;
+        }
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          const lat = seed.lat + (Math.random() - 0.5) * layer.latStep;
+          const lon = wrapLon(seed.lon + (Math.random() - 0.5) * layer.lonStep);
+          const s = sampleCurrent(lat, lon);
+          if (!s.hasCurrent) continue;
+          p.lat = lat;
+          p.lon = lon;
+          p.age = Math.floor(Math.random() * FLOW_MAX_PARTICLE_AGE);
+          p.maxAge = 80 + Math.floor(Math.random() * 41);
+          p.bucket = this.bucketFor(s.speed);
+          return p;
+        }
+        p.lat = seed.lat;
+        p.lon = seed.lon;
+        p.age = Math.floor(Math.random() * FLOW_MAX_PARTICLE_AGE);
+        p.maxAge = 80 + Math.floor(Math.random() * 41);
+        p.bucket = this.bucketFor(seed.speed || 0);
+        return p;
+      }
+
+      pickSeed() {
+        const seeds = state.scenarioData?.currentSeeds || [];
+        if (!seeds.length) return null;
+        if (Math.random() >= 0.3) return seeds[Math.floor(Math.random() * seeds.length)];
+        const total = state.scenarioData.currentSeedWeightTotal || 0;
+        if (total <= 0) return seeds[Math.floor(Math.random() * seeds.length)];
+        let target = Math.random() * total;
+        for (const seed of seeds) {
+          target -= Math.max(0.001, seed.speed);
+          if (target <= 0) return seed;
+        }
+        return seeds[seeds.length - 1];
+      }
+
+      draw(dt) {
+        updateScenarioFlowVisibility();
+        if (this.canvas.hidden || this.interacting || !state.scenarioData?.layers?.current) return;
+        if (!this.particles.length) this.resetParticles();
+        if (!this.particles.length) return;
+        this.resize();
+        this.accumulator += dt;
+        if (this.accumulator < FLOW_FRAME_SECONDS) return;
+        const stepDt = Math.min(0.12, this.accumulator);
+        this.accumulator = 0;
+        this.fade();
+        this.buckets.forEach((bucket) => { bucket.length = 0; });
+        const visualSeconds = stepDt * Number(ui.flowSpeedScale.value || 2) * 86400;
+        const layer = state.scenarioData.layers.current;
+        this.particles.forEach((p) => {
+          p.age += 1;
+          if (p.age > p.maxAge) {
+            this.randomizeParticle(p);
+            return;
+          }
+          const current = sampleCurrent(p.lat, p.lon);
+          if (!current.hasCurrent) {
+            this.randomizeParticle(p);
+            return;
+          }
+          const from = this.project(p.lat, p.lon);
+          const cosLat = Math.max(0.18, Math.cos(p.lat * DEG2RAD));
+          const nextLat = p.lat + (current.v * visualSeconds) / 111320;
+          const nextLon = wrapLon(p.lon + (current.u * visualSeconds) / (111320 * cosLat));
+          if (nextLat < layer.minLat || nextLat > layer.maxLat) {
+            this.randomizeParticle(p);
+            return;
+          }
+          const next = sampleCurrent(nextLat, nextLon);
+          const to = this.project(nextLat, nextLon);
+          if (!next.hasCurrent || !from || !to || Math.hypot(to.x - from.x, to.y - from.y) > 180 * this.dpr) {
+            this.randomizeParticle(p);
+            return;
+          }
+          const bucket = this.bucketFor(next.speed);
+          this.buckets[bucket].push({ x: from.x, y: from.y, xt: to.x, yt: to.y });
+          p.lat = nextLat;
+          p.lon = nextLon;
+          p.bucket = bucket;
+        });
+        this.flushBuckets();
+      }
+
+      fade() {
+        if (this.clearRequested) this.clear();
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.fillStyle = /firefox/i.test(navigator.userAgent) ? "rgba(0, 0, 0, 0.92)" : "rgba(0, 0, 0, 0.95)";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.restore();
+      }
+
+      flushBuckets() {
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.lineWidth = Math.max(1, this.dpr);
+        this.buckets.forEach((bucket, idx) => {
+          if (!bucket.length) return;
+          ctx.beginPath();
+          ctx.strokeStyle = this.colors[idx] || this.colors[this.colors.length - 1];
+          bucket.forEach((segment) => {
+            ctx.moveTo(segment.x, segment.y);
+            ctx.lineTo(segment.xt, segment.yt);
+          });
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+
+      bucketFor(speed) {
+        if (!Number.isFinite(speed)) return 0;
+        return clamp(Math.floor((Math.min(speed, FLOW_MAX_CURRENT_SPEED) / FLOW_MAX_CURRENT_SPEED) * this.colors.length), 0, this.colors.length - 1);
+      }
+
+      project(lat, lon) {
+        const local = geoToWorld(lat, lon, FLOW_ALTITUDE);
+        const world = earthGroup.localToWorld(local.clone());
+        const center = earthGroup.getWorldPosition(new THREE.Vector3());
+        const normal = world.clone().sub(center).normalize();
+        const toCamera = camera.position.clone().sub(world).normalize();
+        if (normal.dot(toCamera) <= 0.035) return null;
+        const ndc = world.project(camera);
+        if (ndc.z < -1 || ndc.z > 1 || ndc.x < -1.08 || ndc.x > 1.08 || ndc.y < -1.08 || ndc.y > 1.08) return null;
+        return {
+          x: (ndc.x * 0.5 + 0.5) * this.canvas.width,
+          y: (-ndc.y * 0.5 + 0.5) * this.canvas.height
+        };
+      }
+    }
+
+    function sampleScenario(lat, lon) {
+      const data = state.scenarioData;
+      if (!data) return null;
+      const current = sampleLayerVectorStrict(data.layers.current, lat, lon, "u_current", "v_current");
+      const wind = sampleLayerVectorStrict(data.layers.wind, lat, lon, "u_wind", "v_wind");
+      const sst = sampleLayerScalarSoft(data.layers.sst, lat, lon, "analysed_sst", 0.52);
+      const hasCurrent = Number.isFinite(current.u) && Number.isFinite(current.v);
+      const hasWind = Number.isFinite(wind.u) && Number.isFinite(wind.v);
+      const hasSst = Number.isFinite(sst);
+      return {
+        hasCurrent,
+        hasWind,
+        hasSst,
+        currentU: current.u,
+        currentV: current.v,
+        currentSpeed: hasCurrent ? Math.hypot(current.u, current.v) : Number.NaN,
+        currentDirection: hasCurrent ? vectorHeadingDeg(current.u, current.v) : Number.NaN,
+        windU: wind.u,
+        windV: wind.v,
+        windSpeed: hasWind ? Math.hypot(wind.u, wind.v) : Number.NaN,
+        windDirection: hasWind ? vectorHeadingDeg(wind.u, wind.v) : Number.NaN,
+        sst
+      };
+    }
+
+    function sampleCurrent(lat, lon) {
+      const current = sampleLayerVectorStrict(state.scenarioData?.layers?.current, lat, lon, "u_current", "v_current");
+      const hasCurrent = Number.isFinite(current.u) && Number.isFinite(current.v);
+      return {
+        hasCurrent,
+        u: current.u,
+        v: current.v,
+        speed: hasCurrent ? Math.hypot(current.u, current.v) : Number.NaN
+      };
+    }
+
+    function sampleLayerVectorStrict(layer, lat, lon, uField, vField) {
+      const cell = getGridCell(layer, lat, lon);
+      if (!cell) return { u: Number.NaN, v: Number.NaN };
+      const u = layer.data[uField];
+      const v = layer.data[vField];
+      if (!u || !v) return { u: Number.NaN, v: Number.NaN };
+      const u00 = readGridValue(layer, u, cell.row0, cell.col0);
+      const u10 = readGridValue(layer, u, cell.row0, cell.col1);
+      const u01 = readGridValue(layer, u, cell.row1, cell.col0);
+      const u11 = readGridValue(layer, u, cell.row1, cell.col1);
+      const v00 = readGridValue(layer, v, cell.row0, cell.col0);
+      const v10 = readGridValue(layer, v, cell.row0, cell.col1);
+      const v01 = readGridValue(layer, v, cell.row1, cell.col0);
+      const v11 = readGridValue(layer, v, cell.row1, cell.col1);
+      if (![u00, u10, u01, u11, v00, v10, v01, v11].every(Number.isFinite)) return { u: Number.NaN, v: Number.NaN };
+      return {
+        u: bilinear(u00, u10, u01, u11, cell.fx, cell.fy),
+        v: bilinear(v00, v10, v01, v11, cell.fx, cell.fy)
+      };
+    }
+
+    function sampleLayerScalarSoft(layer, lat, lon, field, minWeight = 0.45) {
+      const cell = getGridCell(layer, lat, lon);
+      if (!cell) return Number.NaN;
+      const values = layer.data[field];
+      if (!values) return Number.NaN;
+      return weightedBilinear(
+        readGridValue(layer, values, cell.row0, cell.col0),
+        readGridValue(layer, values, cell.row0, cell.col1),
+        readGridValue(layer, values, cell.row1, cell.col0),
+        readGridValue(layer, values, cell.row1, cell.col1),
+        cell.fx,
+        cell.fy,
+        minWeight
+      );
+    }
+
+    function getGridCell(layer, lat, lon) {
+      if (!layer || layer.latCount < 2 || layer.lonCount < 2) return null;
+      if (lat < layer.minLat || lat > layer.maxLat) return null;
+      const latPos = (lat - layer.minLat) / layer.latStep;
+      const row0 = Math.min(Math.max(Math.floor(latPos), 0), layer.latCount - 2);
+      const row1 = row0 + 1;
+      const fy = latPos - row0;
+      let lonPos;
+      if (layer.wrapsLon) {
+        const span = layer.lonStep * layer.lonCount;
+        lonPos = ((normalizeDataLon(lon) - layer.minLon) % span + span) % span;
+        lonPos /= layer.lonStep;
+      } else {
+        const L = normalizeDataLon(lon);
+        if (L < layer.minLon || L > layer.maxLon) return null;
+        lonPos = (L - layer.minLon) / layer.lonStep;
+      }
+      const rawCol = Math.floor(lonPos);
+      const col0 = layer.wrapsLon ? ((rawCol % layer.lonCount) + layer.lonCount) % layer.lonCount : Math.min(Math.max(rawCol, 0), layer.lonCount - 2);
+      const col1 = layer.wrapsLon ? (col0 + 1) % layer.lonCount : col0 + 1;
+      const fx = lonPos - rawCol;
+      return { row0, row1, col0, col1, fx, fy };
+    }
+
+    function readGridValue(layer, values, row, col) {
+      const c = layer.wrapsLon ? ((col % layer.lonCount) + layer.lonCount) % layer.lonCount : col;
+      if (row < 0 || row >= layer.latCount || c < 0 || c >= layer.lonCount) return Number.NaN;
+      return values[row * layer.lonCount + c];
+    }
+
+    function bilinear(a, b, c, d, fx, fy) {
+      return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+    }
+
+    function weightedBilinear(a, b, c, d, fx, fy, minWeight) {
+      const items = [
+        { value: a, weight: (1 - fx) * (1 - fy) },
+        { value: b, weight: fx * (1 - fy) },
+        { value: c, weight: (1 - fx) * fy },
+        { value: d, weight: fx * fy }
+      ];
+      let total = 0;
+      let weighted = 0;
+      items.forEach(({ value, weight }) => {
+        if (!Number.isFinite(value)) return;
+        total += weight;
+        weighted += value * weight;
+      });
+      return total >= minWeight ? weighted / total : Number.NaN;
+    }
+
+    function callEarthNullschoolFallback() {
+      window.open("https://earth.nullschool.net/", "_blank", "noopener,noreferrer");
+      ui.fallbackNote.textContent = "已在新窗口打开 earth.nullschool。本页不调用或抓取其内部数据接口。";
+      state.scenarioFallbackMessage = ui.fallbackNote.textContent;
+      renderSources();
+    }
+
+    function updateScenarioMessage() {
+      if (state.mode !== "scenario") return;
+      ui.scenarioMessage.textContent = state.scenarioMessage || "尚未加载实时数据。";
+      ui.scenarioMessage.className = state.scenarioFailed ? "error" : state.scenarioData ? "ok" : "";
+      ui.fallbackNote.textContent = state.scenarioFallbackMessage || "调用按钮会在新窗口打开 earth.nullschool；刷新会重新读取 NOAA 公开源。";
+    }
+
+    function renderSources() {
+      const scenarioSources = state.scenarioData?.sources?.map((source) => `
+        <p><b>${escapeHtml(source.label)}：</b>${escapeHtml(source.description)} 变量 ${escapeHtml(source.variables)}，单位 ${escapeHtml(source.units)}，时间 ${escapeHtml(formatApiTime(source.time))}，网格 ${escapeHtml(source.grid)}，有效格点 ${source.validCount}。<a href="${source.page}" target="_blank" rel="noreferrer">数据说明</a></p>
+      `).join("") || "<p><b>情境模式：</b>尚未成功加载 NOAA CoastWatch ERDDAP 数据。</p>";
+      const scenarioErrors = state.scenarioErrors?.length
+        ? `<p><b>未加载图层：</b>${state.scenarioErrors.map((err) => `${escapeHtml(err.label)}：${escapeHtml(err.message)}`).join("；")}</p>`
+        : "";
+      const resourceStatuses = renderResourceStatusHtml();
+      ui.sourceText.innerHTML = `
+        ${resourceStatuses}
+        <p><b>教学模式：</b>内联中国高中地理主洋流路径，用于课堂示意，不作为科研或航海依据。</p>
+        ${scenarioSources}
+        ${scenarioErrors}
+        <p><b>earth.nullschool：</b>“调用”按钮只打开 <a href="https://earth.nullschool.net/" target="_blank" rel="noreferrer">earth.nullschool.net</a> 外部页面。本页不调用、抓取或依赖其内部接口。架构参考 <a href="https://github.com/cambecc/earth" target="_blank" rel="noreferrer">cambecc/earth</a>。</p>
+        <p><b>未来扩展：</b>NOAA NOMADS/RTOFS、NASA PO.DAAC OSCAR、CMEMS 可作为更高质量或更细分数据源；若要直接读 GRIB2/NetCDF，建议增加后端预处理或合法代理。</p>
+        <p><b>用途边界：</b>本页用于高中地理课堂可视化，不用于航海、灾害预警或科研定量诊断。</p>
+      `;
+    }
+
+    function renderResourceStatusHtml() {
+      const badge = (status) => {
+        if (status === "ok") return "可用";
+        if (status === "loading") return "读取中";
+        if (status === "warn") return "备用";
+        if (status === "error") return "失败";
+        return "未知";
+      };
+      const items = [
+        { label: "Three.js / OrbitControls", ...state.resourceStatus.runtime },
+        { label: "地球贴图", ...state.resourceStatus.texture },
+        ...Object.values(ERDDAP_SOURCES).map((source) => ({
+          label: source.label,
+          status: state.resourceStatus.erddap[source.key]?.status || "pending",
+          message: state.resourceStatus.erddap[source.key]?.message || "尚未请求。",
+          time: state.resourceStatus.erddap[source.key]?.time,
+          url: state.resourceStatus.erddap[source.key]?.requestUrl || source.url,
+          page: source.page
+        }))
+      ];
+      return `
+        <p><b>在线资源状态：</b>${items.map((item) => {
+          const link = item.page || item.url;
+          const time = item.time ? `；时间 ${escapeHtml(formatApiTime(item.time))}` : "";
+          const urlText = item.url ? `；请求 ${escapeHtml(shortenUrl(item.url))}` : "";
+          const target = link ? ` <a href="${escapeHtml(link)}" target="_blank" rel="noreferrer">链接</a>` : "";
+          return `<span>${escapeHtml(item.label)} [${badge(item.status)}] ${escapeHtml(item.message || "")}${time}${urlText}${target}</span>`;
+        }).join("<br>")}</p>
+      `;
+    }
+
+    function onPointerMove3D(event) {
+      if (document.body.classList.contains("view-2d")) return;
+      const latLon = pickEarthLatLon(event);
+      if (latLon) {
+        hoverMarker.visible = true;
+        hoverMarker.position.copy(geoToWorld(latLon.lat, latLon.lon, MARKER_ALTITUDE));
+        updateReadout(latLon, event.clientX, event.clientY);
+      } else {
+        hoverMarker.visible = false;
+        ui.hitState.textContent = "未命中";
+        tooltip.style.display = "none";
+      }
+      updateTeachingHover();
+    }
+
+    function onClick3D(event) {
+      if (document.body.classList.contains("view-2d")) return;
+      const latLon = pickEarthLatLon(event);
+      if (latLon) locatePoint(latLon.lat, latLon.lon, false);
+    }
+
+    function onPointerMove2D(event) {
+      if (!document.body.classList.contains("view-2d")) return;
+      const latLon = mapEventToGeo(event);
+      if (latLon) updateReadout(latLon, event.clientX, event.clientY);
+    }
+
+    function onClick2D(event) {
+      const latLon = mapEventToGeo(event);
+      if (latLon) locatePoint(latLon.lat, latLon.lon, false);
+    }
+
+    function mapEventToGeo(event) {
+      const rect = ui.map2d.getBoundingClientRect();
+      const box = fitMapRect(ui.map2d.width, ui.map2d.height);
+      const dpr = ui.map2d.width / rect.width;
+      const x = (event.clientX - rect.left) * dpr;
+      const y = (event.clientY - rect.top) * dpr;
+      if (x < box.x || x > box.x + box.w || y < box.y || y > box.y + box.h) return null;
+      return uvToGeo((x - box.x) / box.w, (y - box.y) / box.h);
+    }
+
+    function pickEarthLatLon(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObject(earth, false);
+      if (!hits.length) return null;
+      const local = earthGroup.worldToLocal(hits[0].point.clone()).normalize();
+      return worldToGeo(local);
+    }
+
+    function updateReadout({ lat, lon }, x, y) {
+      state.hoverLatLon = { lat, lon };
+      ui.hitState.textContent = "已命中";
+      ui.latRead.textContent = formatLat(lat);
+      ui.lonRead.textContent = formatLon(lon);
+      const nearest = nearestCity(lat, lon);
+      ui.nearestRead.textContent = `${nearest.name} 约 ${nearest.km.toFixed(0)} km`;
+      const ocean = identifyOcean(lat, lon);
+      ui.oceanName.textContent = ocean;
+      ui.oceanDesc.textContent = OCEAN_INFO[ocean] || "边界或陆地区域，建议指向开阔海域。";
+      if (state.mode === "scenario") updateScenarioReadout(lat, lon);
+      tooltip.style.display = "block";
+      tooltip.style.left = `${Math.min(window.innerWidth - 340, x + 14)}px`;
+      tooltip.style.top = `${Math.min(window.innerHeight - 140, y + 14)}px`;
+      tooltip.innerHTML = `<b>${formatLat(lat)}, ${formatLon(lon)}</b><br>大洋：${escapeHtml(ocean)}<br>最近城市：${escapeHtml(nearest.name)}`;
+    }
+
+    function updateScenarioReadout(lat, lon) {
+      const s = sampleScenario(lat, lon);
+      if (!s || (!s.hasCurrent && !s.hasSst && !s.hasWind)) {
+        ui.scenarioCurrent.textContent = "--";
+        ui.scenarioSst.textContent = "--";
+        ui.scenarioWind.textContent = "--";
+        return;
+      }
+      ui.scenarioCurrent.textContent = s.hasCurrent ? `${s.currentSpeed.toFixed(2)} m/s · ${s.currentDirection.toFixed(0)}°` : "无数据";
+      ui.scenarioSst.textContent = s.hasSst ? `${s.sst.toFixed(1)} °C` : "无数据";
+      ui.scenarioWind.textContent = s.hasWind ? `${s.windSpeed.toFixed(1)} m/s · ${s.windDirection.toFixed(0)}°` : "无数据";
+    }
+
+    function updateTeachingHover() {
+      if (state.mode !== "teaching" || state.teachingView !== "3d") return;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(currentLineObjects, true);
+      if (!hits.length) return;
+      let obj = hits[0].object;
+      while (obj && !obj.userData.current) obj = obj.parent;
+      const c = obj?.userData?.current;
+      if (!c) return;
+      ui.currentName.textContent = c.name;
+      ui.currentName.style.color = cssVarColor(c.type);
+      ui.currentDesc.innerHTML = `<b>${typeLabel(c.type)}</b>｜所属：${c.ocean}<br>${escapeHtml(c.note)}`;
+    }
+
+    function locatePoint(lat, lon, updateCamera) {
+      lat = clamp(lat, -90, 90);
+      lon = wrapLon(lon);
+      state.selectedLatLon = { lat, lon };
+      ui.latInput.value = lat.toFixed(3);
+      ui.lonInput.value = lon.toFixed(3);
+      marker.position.copy(geoToWorld(lat, lon, MARKER_ALTITUDE));
+      if (updateCamera) {
+        const target = geoToWorld(lat, lon, 1);
+        camera.position.copy(target.clone().normalize().multiplyScalar(3.1));
+        controls.target.set(0, 0, 0);
+        controls.update();
+      }
+      updateReadout({ lat, lon }, 24, 180);
+      if (state.mode === "teaching" && state.teachingView === "2d") renderTeaching2D();
+    }
+
+    function renderTeaching2D() {
+      const canvas = ui.map2d;
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.max(720, Math.floor(rect.width * dpr));
+      const h = Math.max(360, Math.floor(rect.height * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#071624";
+      ctx.fillRect(0, 0, w, h);
+      const box = fitMapRect(w, h);
+      try {
+        ctx.drawImage(earthMapTexture.image, box.x, box.y, box.w, box.h);
+      } catch {
+        ctx.fillStyle = "#103757";
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+      }
+      if (ui.showGrid.checked) draw2DGrid(ctx, box, dpr);
+      if (ui.showCurrents.checked) TEACHING_CURRENTS.forEach((c) => draw2DCurrent(ctx, box, c, dpr));
+      if (ui.showCities.checked) draw2DCities(ctx, box, dpr);
+      draw2DMarker(ctx, box, state.selectedLatLon, dpr);
+      ctx.fillStyle = "rgba(238,249,255,0.9)";
+      ctx.font = `${12 * dpr}px "Microsoft YaHei", Arial`;
+      ctx.fillText("教学模式 2D：等经纬平面图；静止线条表示教材主洋流", box.x + 12 * dpr, box.y + box.h - 14 * dpr);
+    }
+
+    function fitMapRect(w, h) {
+      const pad = 20 * Math.min(window.devicePixelRatio || 1, 2);
+      let mw = w - pad * 2;
+      let mh = mw / 2;
+      if (mh > h - pad * 2) {
+        mh = h - pad * 2;
+        mw = mh * 2;
+      }
+      return { x: (w - mw) / 2, y: (h - mh) / 2, w: mw, h: mh };
+    }
+
+    function draw2DGrid(ctx, box, dpr) {
+      ctx.save();
+      ctx.lineWidth = Math.max(1, dpr);
+      ctx.strokeStyle = "rgba(190,230,255,0.28)";
+      for (let lon = -180; lon <= 180; lon += 30) {
+        const x = box.x + ((lon + 180) / 360) * box.w;
+        ctx.beginPath();
+        ctx.moveTo(x, box.y);
+        ctx.lineTo(x, box.y + box.h);
+        ctx.stroke();
+      }
+      for (let lat = -60; lat <= 60; lat += 30) {
+        const y = box.y + ((90 - lat) / 180) * box.h;
+        ctx.beginPath();
+        ctx.moveTo(box.x, y);
+        ctx.lineTo(box.x + box.w, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function draw2DCurrent(ctx, box, current, dpr) {
+      const points = densifyLatLon(current.points, 2).map(([lat, lon]) => mapGeoToCanvas(lat, lon, box));
+      const paths = splitDateline(points);
+      ctx.save();
+      ctx.strokeStyle = cssCanvasColor(current.type);
+      ctx.fillStyle = cssCanvasColor(current.type);
+      ctx.lineWidth = 2.3 * dpr;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      paths.forEach((path) => {
+        if (path.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i += 1) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+        drawArrowHead2D(ctx, path, dpr);
+      });
+      if (ui.showNames.checked) {
+        const mid = points[Math.floor(points.length * 0.52)];
+        ctx.font = `${10 * dpr}px "Microsoft YaHei", Arial`;
+        ctx.fillText(current.name, mid.x + 5 * dpr, mid.y - 5 * dpr);
+      }
+      ctx.restore();
+    }
+
+    function draw2DCities(ctx, box, dpr) {
+      ctx.save();
+      ctx.fillStyle = "#f5fcff";
+      CITIES.forEach((city) => {
+        const p = mapGeoToCanvas(city.lat, city.lon, box);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3.4 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+
+    function draw2DMarker(ctx, box, latLon, dpr) {
+      const p = mapGeoToCanvas(latLon.lat, latLon.lon, box);
+      ctx.save();
+      ctx.fillStyle = "#ff3636";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function mapGeoToCanvas(lat, lon, box) {
+      const uv = geoToUv(lat, lon);
+      return { x: box.x + uv.u * box.w, y: box.y + uv.v * box.h };
+    }
+
+    function drawArrowHead2D(ctx, path, dpr) {
+      const end = path[path.length - 1];
+      const prev = path[Math.max(0, path.length - 5)];
+      const angle = Math.atan2(end.y - prev.y, end.x - prev.x);
+      const size = 9 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(end.x, end.y);
+      ctx.lineTo(end.x - Math.cos(angle - 0.55) * size, end.y - Math.sin(angle - 0.55) * size);
+      ctx.lineTo(end.x - Math.cos(angle + 0.55) * size, end.y - Math.sin(angle + 0.55) * size);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      const t = clock.elapsedTime;
+      if (ui.autoRotate.checked && state.mode === "teaching" && state.teachingView === "3d") {
+        earthGroup.rotation.y += dt * 0.08;
+      }
+      const speed = Number(ui.flowSpeed.value);
+      currentParticleObjects.forEach((p) => {
+        const path = p.userData.path;
+        const phase = (p.userData.phase + t * 0.055 * speed) % 1;
+        const idx = Math.floor(phase * (path.length - 1));
+        const next = Math.min(idx + 1, path.length - 1);
+        const localT = phase * (path.length - 1) - idx;
+        p.position.copy(path[idx].clone().lerp(path[next], localT).normalize().multiplyScalar(1.064));
+      });
+      controls.update();
+      drawScenarioFlow(dt);
+      renderer.render(scene, camera);
+    }
+
+    function geoToUv(latDeg, lonDeg) {
+      const lat = clamp(latDeg, -90, 90);
+      const lon = wrapLon(lonDeg + TEXTURE_LON_OFFSET_DEG);
+      return { u: normalizeUnit((lon + 180) / 360), v: clamp((90 - lat) / 180, 0, 1) };
+    }
+
+    function uvToGeo(u, v) {
+      const uu = normalizeUnit(u);
+      const vv = clamp(v, 0, 1);
+      return { lat: 90 - vv * 180, lon: wrapLon(uu * 360 - 180 - TEXTURE_LON_OFFSET_DEG) };
+    }
+
+    function geoToWorld(latDeg, lonDeg, radius = 1) {
+      const { u, v } = geoToUv(latDeg, lonDeg);
+      const phi = u * Math.PI * 2;
+      const theta = v * Math.PI;
+      const sinTheta = Math.sin(theta);
+      const point = new THREE.Vector3(-radius * Math.cos(phi) * sinTheta, radius * Math.cos(theta), radius * Math.sin(phi) * sinTheta);
+      return point.applyAxisAngle(Y_AXIS, EARTH_TEXTURE_ROTATION_Y);
+    }
+
+    function worldToGeo(v) {
+      const p = v.clone().normalize().applyAxisAngle(Y_AXIS, -EARTH_TEXTURE_ROTATION_Y);
+      const textureV = Math.acos(clamp(p.y, -1, 1)) / Math.PI;
+      const phi = Math.atan2(p.z, -p.x);
+      return uvToGeo(phi / (Math.PI * 2), textureV);
+    }
+
+    function makeCurvePoints(latLonPoints, radius) {
+      const dense = [];
+      for (let i = 0; i < latLonPoints.length - 1; i += 1) {
+        const [lat1, lon1] = latLonPoints[i];
+        const [lat2, lon2] = latLonPoints[i + 1];
+        const steps = Math.max(10, Math.ceil(greatCircleDistanceDeg(lat1, lon1, lat2, lon2) / 2));
+        for (let s = 0; s < steps; s += 1) {
+          const p = interpolateGeo(lat1, lon1, lat2, lon2, s / steps);
+          dense.push(geoToWorld(p.lat, p.lon, radius));
+        }
+      }
+      const last = latLonPoints[latLonPoints.length - 1];
+      dense.push(geoToWorld(last[0], last[1], radius));
+      return dense;
+    }
+
+    function densifyLatLon(latLonPoints, stepDeg) {
+      const out = [];
+      for (let i = 0; i < latLonPoints.length - 1; i += 1) {
+        const [lat1, lon1] = latLonPoints[i];
+        const [lat2, lon2] = latLonPoints[i + 1];
+        const steps = Math.max(2, Math.ceil(greatCircleDistanceDeg(lat1, lon1, lat2, lon2) / stepDeg));
+        for (let s = 0; s < steps; s += 1) {
+          const p = interpolateGeo(lat1, lon1, lat2, lon2, s / steps);
+          out.push([p.lat, p.lon]);
+        }
+      }
+      out.push(latLonPoints[latLonPoints.length - 1]);
+      return out;
+    }
+
+    function interpolateGeo(lat1, lon1, lat2, lon2, f) {
+      return { lat: lat1 + (lat2 - lat1) * f, lon: wrapLon(lon1 + wrapLon(lon2 - lon1) * f) };
+    }
+
+    function greatCircleDistanceDeg(lat1, lon1, lat2, lon2) {
+      const a = geoToWorld(lat1, lon1, 1).normalize();
+      const b = geoToWorld(lat2, lon2, 1).normalize();
+      return Math.acos(clamp(a.dot(b), -1, 1)) * RAD2DEG;
+    }
+
+    function sampleArrowPositions(points, n) {
+      const out = [];
+      for (let i = 1; i <= n; i += 1) {
+        const idx = Math.floor((points.length - 2) * (i / (n + 1)));
+        out.push({ pos: points[idx], dir: points[idx + 1].clone().sub(points[idx - 1]) });
+      }
+      return out;
+    }
+
+    function createSurfaceArrow(pos, dir, color, opacity = 0.9, scale = 1) {
+      const group = new THREE.Group();
+      const tangent = dir.clone().normalize();
+      const normal = pos.clone().normalize();
+      const side = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+      const tip = pos.clone().normalize().multiplyScalar(pos.length() + 0.02);
+      const body = 0.06 * scale;
+      const wing = 0.024 * scale;
+      const base = tip.clone().sub(tangent.clone().multiplyScalar(body));
+      const left = base.clone().add(side.clone().multiplyScalar(wing));
+      const right = base.clone().sub(side.clone().multiplyScalar(wing));
+      const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([base, tip]), mat));
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([left, tip, right]), mat));
+      return group;
+    }
+
+    function vectorToTangent(lat, lon, east, north) {
+      if (!Number.isFinite(east) || !Number.isFinite(north)) return new THREE.Vector3(0, 0, 0);
+      const here = geoToWorld(lat, lon, 1);
+      const eastDir = geoToWorld(lat, lon + 0.1, 1).sub(here).normalize();
+      const northDir = geoToWorld(lat + 0.1, lon, 1).sub(here).normalize();
+      return eastDir.multiplyScalar(east).add(northDir.multiplyScalar(north));
+    }
+
+    function makeTextSprite(text, color) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = 320;
+      canvas.height = 72;
+      ctx.font = "26px Microsoft YaHei, Arial";
+      const w = Math.min(300, ctx.measureText(text).width + 30);
+      ctx.fillStyle = "rgba(3,14,25,0.72)";
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(6, 12, w, 42, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(text, 20, 42);
+      const tex = new THREE.CanvasTexture(canvas);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+      sprite.scale.set(0.18, 0.04, 1);
+      return sprite;
+    }
+
+    function applyDayNight() {
+      earth.material = ui.dayNight.checked ? earthLitMaterial : earthBrightMaterial;
+      sunLight.visible = ui.dayNight.checked;
+      ambientLight.intensity = ui.dayNight.checked ? 0.22 : 0.88;
+    }
+
+    function addStars() {
+      const arr = [];
+      for (let i = 0; i < 850; i += 1) {
+        const r = 18 + Math.random() * 18;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        arr.push(r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
+      scene.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x9fcfff, size: 0.025, transparent: true, opacity: 0.75 })));
+    }
+
+    function disposeGroupChildren(group) {
+      if (!group) return;
+      while (group.children.length) {
+        const child = group.children[0];
+        group.remove(child);
+        child.traverse?.((obj) => {
+          obj.geometry?.dispose?.();
+          const disposeMaterial = (m) => {
+            if (!m) return;
+            ["map", "alphaMap", "bumpMap", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap"].forEach((key) => m[key]?.dispose?.());
+            m.dispose?.();
+          };
+          if (Array.isArray(obj.material)) obj.material.forEach(disposeMaterial);
+          else disposeMaterial(obj.material);
+        });
+      }
+    }
+
+    function nearestCity(lat, lon) {
+      let best = null;
+      CITIES.forEach((city) => {
+        const km = greatCircleDistanceDeg(lat, lon, city.lat, city.lon) * 111.32;
+        if (!best || km < best.km) best = { ...city, km };
+      });
+      return best;
+    }
+
+    function identifyOcean(lat, lon) {
+      const L = wrapLon(lon);
+      if (lat >= 66) return "北冰洋";
+      if (lat <= -50) return "南大洋";
+      if ((L >= 105 || L <= -70) && lat > -55 && lat < 66) return "太平洋";
+      if (L >= -70 && L <= 25 && lat > -55 && lat < 66) return "大西洋";
+      if (L > 25 && L < 105 && lat > -45 && lat < 35) return "印度洋";
+      return "陆地 / 边界区域";
+    }
+
+    function normalizeDataLon(lon) {
+      const wrapped = wrapLon(lon);
+      return Object.is(wrapped, -0) ? 0 : wrapped;
+    }
+
+    function coordKey(value) {
+      return Number(value).toFixed(3);
+    }
+
+    function inferStep(values) {
+      if (!values || values.length < 2) return 1;
+      return Math.abs(values[1] - values[0]) || 1;
+    }
+
+    function shortLayerName(key) {
+      if (key === "current") return "洋流";
+      if (key === "sst") return "SST";
+      if (key === "wind") return "10m 风场";
+      return key;
+    }
+
+    function formatScenarioTimes(data) {
+      if (!data?.sources?.length) return "--";
+      return data.sources.map((source) => `${shortLayerName(source.key)} ${formatApiTime(source.time)}`).join(" / ");
+    }
+
+    function formatScenarioGrids(data) {
+      if (!data?.sources?.length) return "--";
+      return data.sources.map((source) => `${shortLayerName(source.key)} ${source.grid}`).join(" / ");
+    }
+
+    function vectorHeadingDeg(east, north) {
+      return (Math.atan2(east, north) * RAD2DEG + 360) % 360;
+    }
+
+    function sstToColor(sst, color) {
+      const t = clamp((sst + 2) / 34, 0, 1);
+      color.setHSL(0.63 - t * 0.63, 0.86, 0.5);
+      return color;
+    }
+
+    function currentColor(type) {
+      if (type === "warm") return 0xff8356;
+      if (type === "cold") return 0x42bfff;
+      return 0xd88bff;
+    }
+
+    function cssCanvasColor(type) {
+      if (type === "warm") return "#ff8356";
+      if (type === "cold") return "#42bfff";
+      return "#d88bff";
+    }
+
+    function cssVarColor(type) {
+      if (type === "warm") return "var(--warm)";
+      if (type === "cold") return "var(--cold)";
+      return "var(--monsoon)";
+    }
+
+    function typeLabel(type) {
+      if (type === "warm") return "暖流";
+      if (type === "cold") return "寒流";
+      return "季风洋流";
+    }
+
+    function splitDateline(points) {
+      const paths = [];
+      let path = [];
+      points.forEach((p, i) => {
+        if (i && Math.abs(p.x - points[i - 1].x) > 300) {
+          if (path.length > 1) paths.push(path);
+          path = [];
+        }
+        path.push(p);
+      });
+      if (path.length > 1) paths.push(path);
+      return paths;
+    }
+
+    function shortenUrl(url) {
+      const text = String(url || "");
+      return text.length > 120 ? `${text.slice(0, 110)}...` : text;
+    }
+
+    function formatApiTime(value) {
+      if (!value) return "--";
+      const parsed = Date.parse(value);
+      const text = value.replace("T", " ").replace("Z", " UTC");
+      if (!Number.isFinite(parsed)) return text;
+      const ageDays = Math.floor((Date.now() - parsed) / 86400000);
+      if (ageDays > 1) return `${text}，滞后约 ${ageDays} 天`;
+      if (ageDays === 1) return `${text}，滞后约 1 天`;
+      if (ageDays < -1) return `${text}，源站时间晚于本机`;
+      return text;
+    }
+
+    function formatLat(lat) {
+      return `${Math.abs(lat).toFixed(3)}°${lat >= 0 ? "N" : "S"}`;
+    }
+
+    function formatLon(lon) {
+      return `${Math.abs(lon).toFixed(3)}°${lon >= 0 ? "E" : "W"}`;
+    }
+
+    function wrapLon(lon) {
+      let v = Number(lon) || 0;
+      v = ((v + 180) % 360 + 360) % 360 - 180;
+      return v;
+    }
+
+    function normalizeUnit(value) {
+      const n = Number(value) || 0;
+      return ((n % 1) + 1) % 1;
+    }
+
+    function clamp(v, min, max) {
+      return Math.min(max, Math.max(min, Number(v) || 0));
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      resizeScenarioFlowCanvas();
+      clearScenarioFlowCanvas();
+      if (state.mode === "teaching" && state.teachingView === "2d") renderTeaching2D();
+    }
+  </script>
+</body>
+</html>
