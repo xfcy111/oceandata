@@ -557,9 +557,8 @@
       </div>
       <div class="grid2">
         <label class="toggle"><input id="showSst" type="checkbox" checked />SST 着色</label>
-        <label class="toggle"><input id="showWind" type="checkbox" />风场辅助</label>
-        <label class="toggle"><input id="showScenarioParticles" type="checkbox" checked />洋流粒子</label>
-        <label class="toggle"><input id="showScenarioArrows" type="checkbox" />方向辅助</label>
+        <label class="toggle"><input id="showAtmosphere" type="checkbox" />大气</label>
+        <label class="toggle"><input id="showScenarioParticles" type="checkbox" checked />流场粒子</label>
       </div>
       <p class="small">粒子动画为加速表现；点选读数仍为源站返回的真实速度。</p>
       <div class="metric"><span>海流</span><b id="scenarioCurrent">--</b></div>
@@ -640,6 +639,43 @@
     const FLOW_MAX_PARTICLE_AGE = 100;
     const FLOW_ALTITUDE = 1.078;
     const FLOW_MAX_CURRENT_SPEED = 0.7;
+    const FLOW_MAX_WIND_SPEED = 30;
+    const FLOW_FIELD_PROFILES = {
+      ocean: {
+        layerKey: "current",
+        seedKey: "currentSeeds",
+        seedWeightKey: "currentSeedWeightTotal",
+        uField: "u_current",
+        vField: "v_current",
+        maxSpeed: FLOW_MAX_CURRENT_SPEED,
+        timeScaleSeconds: 86400,
+        altitude: FLOW_ALTITUDE,
+        colors: [
+          "rgba(90, 166, 255, 0.30)",
+          "rgba(129, 205, 255, 0.42)",
+          "rgba(177, 238, 255, 0.58)",
+          "rgba(226, 255, 255, 0.78)",
+          "rgba(119, 255, 222, 0.92)"
+        ]
+      },
+      atmosphere: {
+        layerKey: "wind",
+        seedKey: "windSeeds",
+        seedWeightKey: "windSeedWeightTotal",
+        uField: "u_wind",
+        vField: "v_wind",
+        maxSpeed: FLOW_MAX_WIND_SPEED,
+        timeScaleSeconds: 21600,
+        altitude: FLOW_ALTITUDE + 0.018,
+        colors: [
+          "rgba(110, 255, 178, 0.28)",
+          "rgba(137, 255, 190, 0.40)",
+          "rgba(171, 255, 205, 0.56)",
+          "rgba(209, 255, 225, 0.74)",
+          "rgba(244, 255, 238, 0.90)"
+        ]
+      }
+    };
     const SST_TEXTURE_WIDTH = 720;
     const SST_TEXTURE_HEIGHT = 360;
     const state = {
@@ -702,9 +738,8 @@
       flowSpeedScale: document.getElementById("flowSpeedScale"),
       flowSpeedScaleRead: document.getElementById("flowSpeedScaleRead"),
       showSst: document.getElementById("showSst"),
-      showWind: document.getElementById("showWind"),
+      showAtmosphere: document.getElementById("showAtmosphere"),
       showScenarioParticles: document.getElementById("showScenarioParticles"),
-      showScenarioArrows: document.getElementById("showScenarioArrows"),
       scenarioCurrent: document.getElementById("scenarioCurrent"),
       scenarioSst: document.getElementById("scenarioSst"),
       scenarioWind: document.getElementById("scenarioWind"),
@@ -744,8 +779,6 @@
     let currentLabelObjects = [];
     let scenarioGroup;
     let scenarioSstGroup;
-    let scenarioArrowGroup;
-    let scenarioWindGroup;
     let scenarioParticleGroup;
     let scenarioFlow = null;
     let marker;
@@ -996,10 +1029,8 @@
       scenarioGroup = new THREE.Group();
       scenarioGroup.visible = false;
       scenarioSstGroup = new THREE.Group();
-      scenarioArrowGroup = new THREE.Group();
-      scenarioWindGroup = new THREE.Group();
       scenarioParticleGroup = new THREE.Group();
-      scenarioGroup.add(scenarioSstGroup, scenarioArrowGroup, scenarioWindGroup, scenarioParticleGroup);
+      scenarioGroup.add(scenarioSstGroup, scenarioParticleGroup);
       earthGroup.add(scenarioGroup);
     }
 
@@ -1029,8 +1060,13 @@
       ui.view2d.addEventListener("click", () => setTeachingView("2d"));
       ui.locateBtn.addEventListener("click", () => locatePoint(Number(ui.latInput.value), Number(ui.lonInput.value), true));
 
-      [ui.showCurrents, ui.showNames, ui.showGrid, ui.showCities, ui.showSst, ui.showWind, ui.showScenarioParticles, ui.showScenarioArrows].forEach((input) => {
+      [ui.showCurrents, ui.showNames, ui.showGrid, ui.showCities, ui.showSst, ui.showAtmosphere, ui.showScenarioParticles].forEach((input) => {
         input.addEventListener("change", refreshLayerVisibility);
+      });
+      ui.showAtmosphere.addEventListener("change", () => {
+        rebuildScenarioParticles();
+        updateScenarioMessage();
+        if (state.hoverLatLon) updateScenarioReadout(state.hoverLatLon.lat, state.hoverLatLon.lon);
       });
       ui.dayNight.addEventListener("change", applyDayNight);
       ui.particleDensity.addEventListener("input", () => {
@@ -1113,9 +1149,7 @@
       cityGroup.visible = !document.body.classList.contains("view-2d") && ui.showCities.checked;
       scenarioGroup.visible = scenario;
       scenarioSstGroup.visible = scenario && ui.showSst.checked;
-      scenarioWindGroup.visible = scenario && ui.showWind.checked;
       scenarioParticleGroup.visible = false;
-      scenarioArrowGroup.visible = scenario && ui.showScenarioArrows.checked;
       updateScenarioFlowVisibility();
       if (state.mode === "teaching" && state.teachingView === "2d") renderTeaching2D();
     }
@@ -1257,6 +1291,7 @@
         windSeeds: layers.wind ? makeVectorSeeds(layers.wind, "u_wind", "v_wind", 0.5) : []
       };
       data.currentSeedWeightTotal = data.currentSeeds.reduce((sum, seed) => sum + Math.max(0.001, seed.speed), 0);
+      data.windSeedWeightTotal = data.windSeeds.reduce((sum, seed) => sum + Math.max(0.001, seed.speed), 0);
       data.sources = Object.values(layers).map((layer) => ({
         key: layer.key,
         label: layer.label,
@@ -1319,8 +1354,6 @@
       if (!state.scenarioData) return;
       clearScenarioVisuals();
       buildScenarioSst();
-      buildScenarioArrows();
-      buildScenarioWind();
       rebuildScenarioParticles();
       ui.scenarioSource.textContent = state.scenarioData.source;
       ui.scenarioTime.textContent = formatScenarioTimes(state.scenarioData);
@@ -1329,7 +1362,7 @@
     }
 
     function clearScenarioVisuals() {
-      [scenarioSstGroup, scenarioArrowGroup, scenarioWindGroup, scenarioParticleGroup].forEach(disposeGroupChildren);
+      [scenarioSstGroup, scenarioParticleGroup].forEach(disposeGroupChildren);
       if (scenarioFlow) scenarioFlow.resetParticles(true);
       clearScenarioFlowCanvas();
       ui.scenarioTime.textContent = "--";
@@ -1389,32 +1422,6 @@
       return texture;
     }
 
-    function buildScenarioArrows() {
-      const seeds = state.scenarioData?.currentSeeds || [];
-      const stride = Math.max(1, Math.ceil(seeds.length / 420));
-      seeds.forEach((s, idx) => {
-        if (idx % stride !== 0) return;
-        const pos = geoToWorld(s.lat, s.lon, 1.07);
-        const dir = vectorToTangent(s.lat, s.lon, s.u, s.v);
-        const scale = clamp(0.55 + s.speed / FLOW_MAX_CURRENT_SPEED, 0.55, 1.55);
-        const opacity = clamp(0.28 + s.speed / FLOW_MAX_CURRENT_SPEED * 0.42, 0.28, 0.76);
-        scenarioArrowGroup.add(createSurfaceArrow(pos, dir, 0xeafcff, opacity, scale));
-      });
-    }
-
-    function buildScenarioWind() {
-      const seeds = state.scenarioData?.windSeeds || [];
-      const stride = Math.max(1, Math.ceil(seeds.length / 360));
-      seeds.forEach((s, idx) => {
-        if (idx % stride !== 0) return;
-        const pos = geoToWorld(s.lat, s.lon, 1.105);
-        const dir = vectorToTangent(s.lat, s.lon, s.u, s.v);
-        const scale = clamp(0.5 + s.speed / 12, 0.55, 1.55);
-        const opacity = clamp(0.22 + s.speed / 18, 0.22, 0.66);
-        scenarioWindGroup.add(createSurfaceArrow(pos, dir, 0x9dffb5, opacity, scale));
-      });
-    }
-
     function rebuildScenarioParticles() {
       if (!scenarioFlow) setupScenarioFlowCanvas();
       scenarioFlow.resetParticles();
@@ -1437,11 +1444,42 @@
       scenarioFlow.clear();
     }
 
+    function getActiveFlowProfile() {
+      return ui.showAtmosphere.checked ? FLOW_FIELD_PROFILES.atmosphere : FLOW_FIELD_PROFILES.ocean;
+    }
+
+    function getActiveFlowLayer(profile = getActiveFlowProfile()) {
+      return state.scenarioData?.layers?.[profile.layerKey] || null;
+    }
+
+    function getActiveFlowSeeds(profile = getActiveFlowProfile()) {
+      return state.scenarioData?.[profile.seedKey] || [];
+    }
+
+    function getActiveFlowSeedWeightTotal(profile = getActiveFlowProfile()) {
+      return state.scenarioData?.[profile.seedWeightKey] || 0;
+    }
+
+    function hasActiveFlowData(profile = getActiveFlowProfile()) {
+      return !!getActiveFlowLayer(profile) && !!getActiveFlowSeeds(profile).length;
+    }
+
+    function sampleFlowVector(profile, lat, lon) {
+      const vector = sampleLayerVectorStrict(getActiveFlowLayer(profile), lat, lon, profile.uField, profile.vField);
+      const hasVector = Number.isFinite(vector.u) && Number.isFinite(vector.v);
+      return {
+        hasVector,
+        u: vector.u,
+        v: vector.v,
+        speed: hasVector ? Math.hypot(vector.u, vector.v) : Number.NaN
+      };
+    }
+
     function updateScenarioFlowVisibility() {
+      const profile = getActiveFlowProfile();
       const visible = state.mode === "scenario"
         && ui.showScenarioParticles.checked
-        && !!state.scenarioData?.layers?.current
-        && !!state.scenarioData?.currentSeeds?.length;
+        && hasActiveFlowData(profile);
       if (!scenarioFlow) setupScenarioFlowCanvas();
       scenarioFlow.setVisible(visible);
     }
@@ -1473,14 +1511,8 @@
         this.interacting = false;
         this.particles = [];
         this.clearRequested = true;
-        this.colors = [
-          "rgba(90, 166, 255, 0.30)",
-          "rgba(129, 205, 255, 0.42)",
-          "rgba(177, 238, 255, 0.58)",
-          "rgba(226, 255, 255, 0.78)",
-          "rgba(119, 255, 222, 0.92)"
-        ];
-        this.buckets = Array.from({ length: this.colors.length }, () => []);
+        this.bucketCount = Math.max(...Object.values(FLOW_FIELD_PROFILES).map((profile) => profile.colors.length));
+        this.buckets = Array.from({ length: this.bucketCount }, () => []);
         this.resize();
       }
 
@@ -1518,14 +1550,16 @@
 
       resetParticles(empty = false) {
         this.particles.length = 0;
-        if (empty || !state.scenarioData?.layers?.current || !state.scenarioData.currentSeeds.length) return;
+        const profile = getActiveFlowProfile();
+        if (empty || !getActiveFlowLayer(profile) || !getActiveFlowSeeds(profile).length) return;
         const count = getScenarioParticleTarget();
         for (let i = 0; i < count; i += 1) this.particles.push(this.randomizeParticle({}));
       }
 
       randomizeParticle(p) {
-        const seed = this.pickSeed();
-        const layer = state.scenarioData?.layers?.current;
+        const profile = getActiveFlowProfile();
+        const seed = this.pickSeed(profile);
+        const layer = getActiveFlowLayer(profile);
         if (!seed || !layer) {
           p.lat = 0;
           p.lon = 0;
@@ -1537,28 +1571,28 @@
         for (let attempt = 0; attempt < 10; attempt += 1) {
           const lat = seed.lat + (Math.random() - 0.5) * layer.latStep;
           const lon = wrapLon(seed.lon + (Math.random() - 0.5) * layer.lonStep);
-          const s = sampleCurrent(lat, lon);
-          if (!s.hasCurrent) continue;
+          const s = sampleFlowVector(profile, lat, lon);
+          if (!s.hasVector) continue;
           p.lat = lat;
           p.lon = lon;
           p.age = Math.floor(Math.random() * FLOW_MAX_PARTICLE_AGE);
           p.maxAge = 80 + Math.floor(Math.random() * 41);
-          p.bucket = this.bucketFor(s.speed);
+          p.bucket = this.bucketFor(s.speed, profile);
           return p;
         }
         p.lat = seed.lat;
         p.lon = seed.lon;
         p.age = Math.floor(Math.random() * FLOW_MAX_PARTICLE_AGE);
         p.maxAge = 80 + Math.floor(Math.random() * 41);
-        p.bucket = this.bucketFor(seed.speed || 0);
+        p.bucket = this.bucketFor(seed.speed || 0, profile);
         return p;
       }
 
-      pickSeed() {
-        const seeds = state.scenarioData?.currentSeeds || [];
+      pickSeed(profile = getActiveFlowProfile()) {
+        const seeds = getActiveFlowSeeds(profile);
         if (!seeds.length) return null;
         if (Math.random() >= 0.3) return seeds[Math.floor(Math.random() * seeds.length)];
-        const total = state.scenarioData.currentSeedWeightTotal || 0;
+        const total = getActiveFlowSeedWeightTotal(profile);
         if (total <= 0) return seeds[Math.floor(Math.random() * seeds.length)];
         let target = Math.random() * total;
         for (const seed of seeds) {
@@ -1570,7 +1604,9 @@
 
       draw(dt) {
         updateScenarioFlowVisibility();
-        if (this.canvas.hidden || this.interacting || !state.scenarioData?.layers?.current) return;
+        const profile = getActiveFlowProfile();
+        const layer = getActiveFlowLayer(profile);
+        if (this.canvas.hidden || this.interacting || !layer) return;
         if (!this.particles.length) this.resetParticles();
         if (!this.particles.length) return;
         this.resize();
@@ -1580,34 +1616,33 @@
         this.accumulator = 0;
         this.fade();
         this.buckets.forEach((bucket) => { bucket.length = 0; });
-        const visualSeconds = stepDt * Number(ui.flowSpeedScale.value || 2) * 86400;
-        const layer = state.scenarioData.layers.current;
+        const visualSeconds = stepDt * Number(ui.flowSpeedScale.value || 2) * profile.timeScaleSeconds;
         this.particles.forEach((p) => {
           p.age += 1;
           if (p.age > p.maxAge) {
             this.randomizeParticle(p);
             return;
           }
-          const current = sampleCurrent(p.lat, p.lon);
-          if (!current.hasCurrent) {
+          const flow = sampleFlowVector(profile, p.lat, p.lon);
+          if (!flow.hasVector) {
             this.randomizeParticle(p);
             return;
           }
-          const from = this.project(p.lat, p.lon);
+          const from = this.project(p.lat, p.lon, profile);
           const cosLat = Math.max(0.18, Math.cos(p.lat * DEG2RAD));
-          const nextLat = p.lat + (current.v * visualSeconds) / 111320;
-          const nextLon = wrapLon(p.lon + (current.u * visualSeconds) / (111320 * cosLat));
+          const nextLat = p.lat + (flow.v * visualSeconds) / 111320;
+          const nextLon = wrapLon(p.lon + (flow.u * visualSeconds) / (111320 * cosLat));
           if (nextLat < layer.minLat || nextLat > layer.maxLat) {
             this.randomizeParticle(p);
             return;
           }
-          const next = sampleCurrent(nextLat, nextLon);
-          const to = this.project(nextLat, nextLon);
-          if (!next.hasCurrent || !from || !to || Math.hypot(to.x - from.x, to.y - from.y) > 180 * this.dpr) {
+          const next = sampleFlowVector(profile, nextLat, nextLon);
+          const to = this.project(nextLat, nextLon, profile);
+          if (!next.hasVector || !from || !to || Math.hypot(to.x - from.x, to.y - from.y) > 180 * this.dpr) {
             this.randomizeParticle(p);
             return;
           }
-          const bucket = this.bucketFor(next.speed);
+          const bucket = this.bucketFor(next.speed, profile);
           this.buckets[bucket].push({ x: from.x, y: from.y, xt: to.x, yt: to.y });
           p.lat = nextLat;
           p.lon = nextLon;
@@ -1628,13 +1663,14 @@
 
       flushBuckets() {
         const ctx = this.ctx;
+        const colors = getActiveFlowProfile().colors;
         ctx.save();
         ctx.globalCompositeOperation = "source-over";
         ctx.lineWidth = Math.max(1, this.dpr);
         this.buckets.forEach((bucket, idx) => {
           if (!bucket.length) return;
           ctx.beginPath();
-          ctx.strokeStyle = this.colors[idx] || this.colors[this.colors.length - 1];
+          ctx.strokeStyle = colors[idx] || colors[colors.length - 1];
           bucket.forEach((segment) => {
             ctx.moveTo(segment.x, segment.y);
             ctx.lineTo(segment.xt, segment.yt);
@@ -1644,13 +1680,14 @@
         ctx.restore();
       }
 
-      bucketFor(speed) {
+      bucketFor(speed, profile = getActiveFlowProfile()) {
         if (!Number.isFinite(speed)) return 0;
-        return clamp(Math.floor((Math.min(speed, FLOW_MAX_CURRENT_SPEED) / FLOW_MAX_CURRENT_SPEED) * this.colors.length), 0, this.colors.length - 1);
+        const colors = profile.colors;
+        return clamp(Math.floor((Math.min(speed, profile.maxSpeed) / profile.maxSpeed) * colors.length), 0, colors.length - 1);
       }
 
-      project(lat, lon) {
-        const local = geoToWorld(lat, lon, FLOW_ALTITUDE);
+      project(lat, lon, profile = getActiveFlowProfile()) {
+        const local = geoToWorld(lat, lon, profile.altitude);
         const world = earthGroup.localToWorld(local.clone());
         const center = earthGroup.getWorldPosition(new THREE.Vector3());
         const normal = world.clone().sub(center).normalize();
@@ -1685,19 +1722,8 @@
         windU: wind.u,
         windV: wind.v,
         windSpeed: hasWind ? Math.hypot(wind.u, wind.v) : Number.NaN,
-        windDirection: hasWind ? vectorHeadingDeg(wind.u, wind.v) : Number.NaN,
+        windDirection: hasWind ? meteorologicalWindDirectionDeg(wind.u, wind.v) : Number.NaN,
         sst
-      };
-    }
-
-    function sampleCurrent(lat, lon) {
-      const current = sampleLayerVectorStrict(state.scenarioData?.layers?.current, lat, lon, "u_current", "v_current");
-      const hasCurrent = Number.isFinite(current.u) && Number.isFinite(current.v);
-      return {
-        hasCurrent,
-        u: current.u,
-        v: current.v,
-        speed: hasCurrent ? Math.hypot(current.u, current.v) : Number.NaN
       };
     }
 
@@ -1798,8 +1824,11 @@
 
     function updateScenarioMessage() {
       if (state.mode !== "scenario") return;
-      ui.scenarioMessage.textContent = state.scenarioMessage || "尚未加载实时数据。";
-      ui.scenarioMessage.className = state.scenarioFailed ? "error" : state.scenarioData ? "ok" : "";
+      const atmosphereUnavailable = ui.showAtmosphere.checked && state.scenarioData && !hasActiveFlowData(FLOW_FIELD_PROFILES.atmosphere);
+      ui.scenarioMessage.textContent = atmosphereUnavailable
+        ? "风场暂不可用：当前实时 JSON 没有可用的 GFS 10m wind 图层。"
+        : state.scenarioMessage || "尚未加载实时数据。";
+      ui.scenarioMessage.className = state.scenarioFailed || atmosphereUnavailable ? "error" : state.scenarioData ? "ok" : "";
       ui.fallbackNote.textContent = state.scenarioFallbackMessage || "调用按钮会在新窗口打开 earth.nullschool；刷新会重新读取 NOAA 公开源。";
     }
 
@@ -2337,6 +2366,11 @@
 
     function vectorHeadingDeg(east, north) {
       return (Math.atan2(east, north) * RAD2DEG + 360) % 360;
+    }
+
+    function meteorologicalWindDirectionDeg(east, north) {
+      const degrees = (Math.atan2(-east, -north) * RAD2DEG + 360) % 360;
+      return (Math.round(degrees / 5) * 5) % 360;
     }
 
     function sstToColor(sst, color) {

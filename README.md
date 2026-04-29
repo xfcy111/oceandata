@@ -5,7 +5,7 @@
 - 页面入口：https://xfcy111.github.io/oceandata/
 - 数据 JSON：https://xfcy111.github.io/oceandata/data/yangliu-live-v1.json
 
-`yangliu02.html` 的教学模式使用内联教材洋流路径；情境模式读取 GitHub Actions 生成的 `data/yangliu-live-v1.json`，再在浏览器中渲染 SST 覆盖层、Canvas 洋流粒子拖尾和风场辅助箭头。
+`yangliu02.html` 的教学模式使用内联教材洋流路径；情境模式读取 GitHub Actions 生成的 `data/yangliu-live-v1.json`，再在浏览器中渲染 SST 覆盖层和 Canvas 流场粒子。默认显示洋流粒子；打开“大气”开关后，主粒子动画切换为 GFS 10m 风场。
 
 ## Data Workflow
 
