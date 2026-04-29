@@ -559,6 +559,7 @@
         <label class="toggle"><input id="showSst" type="checkbox" checked />SST 着色</label>
         <label class="toggle"><input id="showAtmosphere" type="checkbox" />大气</label>
         <label class="toggle"><input id="showScenarioParticles" type="checkbox" checked />流场粒子</label>
+        <label class="toggle"><input id="showScenarioArrows" type="checkbox" />方向辅助</label>
       </div>
       <p class="small">粒子动画为加速表现；点选读数仍为源站返回的真实速度。</p>
       <div class="metric"><span>海流</span><b id="scenarioCurrent">--</b></div>
@@ -740,6 +741,7 @@
       showSst: document.getElementById("showSst"),
       showAtmosphere: document.getElementById("showAtmosphere"),
       showScenarioParticles: document.getElementById("showScenarioParticles"),
+      showScenarioArrows: document.getElementById("showScenarioArrows"),
       scenarioCurrent: document.getElementById("scenarioCurrent"),
       scenarioSst: document.getElementById("scenarioSst"),
       scenarioWind: document.getElementById("scenarioWind"),
@@ -779,6 +781,7 @@
     let currentLabelObjects = [];
     let scenarioGroup;
     let scenarioSstGroup;
+    let scenarioArrowGroup;
     let scenarioParticleGroup;
     let scenarioFlow = null;
     let marker;
@@ -1029,8 +1032,9 @@
       scenarioGroup = new THREE.Group();
       scenarioGroup.visible = false;
       scenarioSstGroup = new THREE.Group();
+      scenarioArrowGroup = new THREE.Group();
       scenarioParticleGroup = new THREE.Group();
-      scenarioGroup.add(scenarioSstGroup, scenarioParticleGroup);
+      scenarioGroup.add(scenarioSstGroup, scenarioArrowGroup, scenarioParticleGroup);
       earthGroup.add(scenarioGroup);
     }
 
@@ -1060,7 +1064,7 @@
       ui.view2d.addEventListener("click", () => setTeachingView("2d"));
       ui.locateBtn.addEventListener("click", () => locatePoint(Number(ui.latInput.value), Number(ui.lonInput.value), true));
 
-      [ui.showCurrents, ui.showNames, ui.showGrid, ui.showCities, ui.showSst, ui.showAtmosphere, ui.showScenarioParticles].forEach((input) => {
+      [ui.showCurrents, ui.showNames, ui.showGrid, ui.showCities, ui.showSst, ui.showAtmosphere, ui.showScenarioParticles, ui.showScenarioArrows].forEach((input) => {
         input.addEventListener("change", refreshLayerVisibility);
       });
       ui.showAtmosphere.addEventListener("change", () => {
@@ -1149,6 +1153,7 @@
       cityGroup.visible = !document.body.classList.contains("view-2d") && ui.showCities.checked;
       scenarioGroup.visible = scenario;
       scenarioSstGroup.visible = scenario && ui.showSst.checked;
+      scenarioArrowGroup.visible = scenario && ui.showScenarioArrows.checked;
       scenarioParticleGroup.visible = false;
       updateScenarioFlowVisibility();
       if (state.mode === "teaching" && state.teachingView === "2d") renderTeaching2D();
@@ -1354,6 +1359,7 @@
       if (!state.scenarioData) return;
       clearScenarioVisuals();
       buildScenarioSst();
+      buildScenarioArrows();
       rebuildScenarioParticles();
       ui.scenarioSource.textContent = state.scenarioData.source;
       ui.scenarioTime.textContent = formatScenarioTimes(state.scenarioData);
@@ -1362,7 +1368,7 @@
     }
 
     function clearScenarioVisuals() {
-      [scenarioSstGroup, scenarioParticleGroup].forEach(disposeGroupChildren);
+      [scenarioSstGroup, scenarioArrowGroup, scenarioParticleGroup].forEach(disposeGroupChildren);
       if (scenarioFlow) scenarioFlow.resetParticles(true);
       clearScenarioFlowCanvas();
       ui.scenarioTime.textContent = "--";
@@ -1420,6 +1426,19 @@
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.needsUpdate = true;
       return texture;
+    }
+
+    function buildScenarioArrows() {
+      const seeds = state.scenarioData?.currentSeeds || [];
+      const stride = Math.max(1, Math.ceil(seeds.length / 420));
+      seeds.forEach((s, idx) => {
+        if (idx % stride !== 0) return;
+        const pos = geoToWorld(s.lat, s.lon, 1.07);
+        const dir = vectorToTangent(s.lat, s.lon, s.u, s.v);
+        const scale = clamp(0.55 + s.speed / FLOW_MAX_CURRENT_SPEED, 0.55, 1.55);
+        const opacity = clamp(0.28 + s.speed / FLOW_MAX_CURRENT_SPEED * 0.42, 0.28, 0.76);
+        scenarioArrowGroup.add(createSurfaceArrow(pos, dir, 0xeafcff, opacity, scale));
+      });
     }
 
     function rebuildScenarioParticles() {
