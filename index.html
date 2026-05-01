@@ -544,6 +544,14 @@
     <div id="scenarioPanel" class="section mode-panel" hidden>
       <h3 class="title">情境模式：实时公开数据</h3>
       <div id="scenarioMessage">尚未加载实时数据。</div>
+      <div class="row">
+        <span>数据日期</span>
+        <span class="seg" role="group" aria-label="情境模式数据日期">
+          <button id="scenarioLatest" class="active" type="button">最新</button>
+          <button id="scenarioWinter" type="button">冬季</button>
+          <button id="scenarioSummer" type="button">夏季</button>
+        </span>
+      </div>
       <div class="metric"><span>主数据源</span><b id="scenarioSource">GitHub Actions live JSON</b></div>
       <div class="metric"><span>数据时间</span><b id="scenarioTime">--</b></div>
       <div class="metric"><span>采样网格</span><b id="scenarioGrid">--</b></div>
@@ -613,12 +621,22 @@
       "https://xfcy111.github.io/oceandata/data/yangliu-live-v1.json",
       "./data/yangliu-live-v1.json"
     ];
+    const SEASONAL_DATA_URLS = [
+      "https://xfcy111.github.io/oceandata/data/yangliu-seasonal-v1.json",
+      "./data/yangliu-seasonal-v1.json"
+    ];
+    const SCENARIO_PRESETS = {
+      latest: { key: "latest", label: "最新", source: "GitHub Actions live JSON", dataType: "live" },
+      winter: { key: "winter", label: "冬季", source: "GitHub Pages seasonal JSON", dataType: "historical" },
+      summer: { key: "summer", label: "夏季", source: "GitHub Pages seasonal JSON", dataType: "historical" }
+    };
     const LIVE_DATA_PRODUCTS = [
       {
         key: "current",
         label: "NOAA RTOFS Global surface current",
         variables: ["uCurrent", "vCurrent"],
         units: "m/s",
+        dataType: "lagged",
         description: "GitHub Actions 预处理的 RTOFS f000 全球表层流，2° 规则网格。"
       },
       {
@@ -626,6 +644,7 @@
         label: "NOAA RTOFS surface temperature fallback",
         variables: ["sst"],
         units: "degC",
+        dataType: "lagged",
         description: "首版使用 RTOFS 表层温度作为 SST 兜底；后续可替换为 NOAA OISST。"
       },
       {
@@ -633,6 +652,7 @@
         label: "NOAA GFS f000 10m wind",
         variables: ["windU", "windV"],
         units: "m/s",
+        dataType: "live",
         description: "GitHub Actions 预处理的 GFS 分析时次 10m 风，不读取未来预报时次。"
       }
     ];
@@ -684,9 +704,11 @@
       teachingView: "3d",
       hoverLatLon: null,
       selectedLatLon: { lat: 39.904, lon: 116.407 },
+      scenarioPreset: "latest",
       scenarioLoading: false,
       scenarioFailed: false,
       scenarioData: null,
+      seasonalData: null,
       scenarioMessage: "",
       scenarioFallbackMessage: "",
       scenarioErrors: [],
@@ -731,6 +753,9 @@
       flowSpeed: document.getElementById("flowSpeed"),
       map2d: document.getElementById("map2d"),
       scenarioMessage: document.getElementById("scenarioMessage"),
+      scenarioLatest: document.getElementById("scenarioLatest"),
+      scenarioWinter: document.getElementById("scenarioWinter"),
+      scenarioSummer: document.getElementById("scenarioSummer"),
       scenarioSource: document.getElementById("scenarioSource"),
       scenarioTime: document.getElementById("scenarioTime"),
       scenarioGrid: document.getElementById("scenarioGrid"),
@@ -1060,6 +1085,11 @@
 
       [ui.modeTeaching, ui.hudTeaching].forEach((btn) => btn.addEventListener("click", () => setMode("teaching")));
       [ui.modeScenario, ui.hudScenario].forEach((btn) => btn.addEventListener("click", () => setMode("scenario")));
+      [
+        [ui.scenarioLatest, "latest"],
+        [ui.scenarioWinter, "winter"],
+        [ui.scenarioSummer, "summer"]
+      ].forEach(([btn, preset]) => btn.addEventListener("click", () => setScenarioPreset(preset)));
       ui.view3d.addEventListener("click", () => setTeachingView("3d"));
       ui.view2d.addEventListener("click", () => setTeachingView("2d"));
       ui.locateBtn.addEventListener("click", () => locatePoint(Number(ui.latInput.value), Number(ui.lonInput.value), true));
@@ -1081,7 +1111,7 @@
         updateScenarioControlReadouts();
         clearScenarioFlowCanvas();
       });
-      ui.reloadLive.addEventListener("click", () => loadLiveScenario({ force: true }));
+      ui.reloadLive.addEventListener("click", () => loadScenarioSelection({ force: true }));
       ui.backTeaching.addEventListener("click", () => setMode("teaching"));
       ui.callNullschool.addEventListener("click", callEarthNullschoolFallback);
       ui.sourceToggle.addEventListener("click", () => {
@@ -1106,12 +1136,24 @@
         state.teachingView = "3d";
         refreshUi();
         refreshLayerVisibility();
-        if (!state.scenarioData && !state.scenarioLoading) {
-          loadLiveScenario({ force: false });
+        if ((!state.scenarioData || state.scenarioData.presetKey !== state.scenarioPreset) && !state.scenarioLoading) {
+          loadScenarioSelection({ force: false });
         }
       } else {
         refreshUi();
         refreshLayerVisibility();
+      }
+    }
+
+    async function setScenarioPreset(preset) {
+      if (!SCENARIO_PRESETS[preset]) return;
+      if (state.scenarioPreset === preset && state.scenarioData?.presetKey === preset) return;
+      state.scenarioPreset = preset;
+      refreshScenarioPresetButtons();
+      if (state.mode === "scenario") {
+        await loadScenarioSelection({ force: false });
+      } else {
+        refreshUi();
       }
     }
 
@@ -1140,8 +1182,19 @@
       ui.modeHint.textContent = scenario
         ? "情境模式不会自动跳回教学模式；实时源失败时可刷新或点击左下角调用备选。"
         : "教学模式已启用，使用内联教材洋流数据作为课堂兜底。";
+      refreshScenarioPresetButtons();
       updateScenarioControlReadouts();
       updateScenarioMessage();
+    }
+
+    function refreshScenarioPresetButtons() {
+      [
+        [ui.scenarioLatest, "latest"],
+        [ui.scenarioWinter, "winter"],
+        [ui.scenarioSummer, "summer"]
+      ].forEach(([btn, preset]) => {
+        btn.classList.toggle("active", state.scenarioPreset === preset);
+      });
     }
 
     function refreshLayerVisibility() {
@@ -1159,9 +1212,15 @@
       if (state.mode === "teaching" && state.teachingView === "2d") renderTeaching2D();
     }
 
+    async function loadScenarioSelection({ force }) {
+      return state.scenarioPreset === "latest"
+        ? loadLiveScenario({ force })
+        : loadSeasonalScenario({ force, preset: state.scenarioPreset });
+    }
+
     async function loadLiveScenario({ force }) {
       if (state.scenarioLoading) return;
-      if (state.scenarioData && !force) return;
+      if (state.scenarioData?.presetKey === "latest" && !force) return;
       state.scenarioLoading = true;
       state.scenarioFailed = false;
       state.scenarioErrors = [];
@@ -1211,6 +1270,62 @@
       refreshLayerVisibility();
     }
 
+    async function loadSeasonalScenario({ force, preset }) {
+      if (state.scenarioLoading) return;
+      if (state.scenarioData?.presetKey === preset && !force) return;
+      const presetInfo = SCENARIO_PRESETS[preset] || SCENARIO_PRESETS.latest;
+      state.scenarioLoading = true;
+      state.scenarioFailed = false;
+      state.scenarioErrors = [];
+      state.scenarioMessage = `正在读取 ${presetInfo.label} 固定日期公开数据...`;
+      state.resourceStatus.liveData = {
+        status: "loading",
+        label: "yangliu-seasonal-v1.json",
+        message: `正在请求 ${presetInfo.label} 固定日期 JSON 网格...`,
+        requestUrl: SEASONAL_DATA_URLS[0]
+      };
+      updateScenarioMessage();
+      clearScenarioVisuals();
+
+      try {
+        const seasonalJson = await fetchSeasonalDataJson({ force });
+        const scene = seasonalJson?.scenes?.[preset];
+        if (!scene) throw new Error(`季节 JSON 中没有 ${preset} 场景`);
+        const sceneJson = createSeasonalScenePayload(seasonalJson, scene, preset);
+        state.scenarioData = createScenarioData(sceneJson, { presetKey: preset });
+        state.scenarioErrors = scene.errors || [];
+        state.scenarioFailed = !state.scenarioData.sources.length;
+        state.scenarioMessage = state.scenarioFailed
+          ? `${presetInfo.label} 固定日期 JSON 已读取，但没有任何成功图层。`
+          : buildScenarioStatusText(state.scenarioData);
+        state.resourceStatus.liveData = {
+          status: state.scenarioFailed ? "warn" : "ok",
+          label: "yangliu-seasonal-v1.json",
+          message: state.scenarioFailed ? "季节 JSON 可读取，但没有成功图层。" : `${presetInfo.label} 固定日期 JSON 已加载。`,
+          time: scene.generatedAt || seasonalJson.generatedAt,
+          requestUrl: seasonalJson.__requestUrl || SEASONAL_DATA_URLS[0]
+        };
+        buildScenarioVisuals();
+      } catch (err) {
+        state.scenarioData = null;
+        state.scenarioFailed = true;
+        state.scenarioErrors = [{ key: "seasonalData", label: "yangliu-seasonal-v1.json", message: err?.message || String(err) }];
+        state.scenarioMessage = `${presetInfo.label} 固定日期数据暂不可用：${err?.message || String(err)}`;
+        state.resourceStatus.liveData = {
+          status: "error",
+          label: "yangliu-seasonal-v1.json",
+          message: err?.message || String(err),
+          requestUrl: SEASONAL_DATA_URLS[0]
+        };
+        clearScenarioVisuals();
+      } finally {
+        state.scenarioLoading = false;
+      }
+      updateScenarioMessage();
+      renderSources();
+      refreshLayerVisibility();
+    }
+
     async function fetchLiveDataJson() {
       const errors = [];
       for (const url of LIVE_DATA_URLS) {
@@ -1226,6 +1341,44 @@
         }
       }
       throw new Error(errors.join("；"));
+    }
+
+    async function fetchSeasonalDataJson({ force }) {
+      if (state.seasonalData && !force) return state.seasonalData;
+      const errors = [];
+      for (const url of SEASONAL_DATA_URLS) {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const json = await response.json();
+          if (json?.version !== "yangliu-seasonal-v1") throw new Error("JSON 版本不是 yangliu-seasonal-v1");
+          json.__requestUrl = url;
+          state.seasonalData = json;
+          return json;
+        } catch (err) {
+          errors.push(`${url}: ${err?.message || String(err)}`);
+        }
+      }
+      throw new Error(errors.join("；"));
+    }
+
+    function createSeasonalScenePayload(seasonalJson, scene, preset) {
+      const presetInfo = SCENARIO_PRESETS[preset] || SCENARIO_PRESETS.latest;
+      return {
+        version: "yangliu-live-v1",
+        generatedAt: scene.generatedAt || seasonalJson.generatedAt,
+        grid: scene.grid || seasonalJson.grid,
+        fields: scene.fields || {},
+        times: scene.times || {},
+        sources: scene.sources || [],
+        errors: scene.errors || [],
+        source: `${presetInfo.source} · ${scene.label || presetInfo.label} ${scene.date || ""}`.trim(),
+        dataType: scene.dataType || presetInfo.dataType,
+        timeModeLabel: scene.timeModeLabel || "历史固定日期",
+        sceneLabel: scene.label || presetInfo.label,
+        sceneDate: scene.date || "",
+        __requestUrl: seasonalJson.__requestUrl || SEASONAL_DATA_URLS[0]
+      };
     }
 
     function createGridLayerFromLive(json, product, fieldMap, time) {
@@ -1271,13 +1424,14 @@
         requestUrl: json.__requestUrl || "",
         description: source.description || product.description,
         units: source.units || product.units,
+        dataType: source.dataType || json.dataType || product.dataType || "",
         validCount: 0
       };
       layer.validCount = countLayerValid(layer);
       return layer;
     }
 
-    function createScenarioData(json) {
+    function createScenarioData(json, options = {}) {
       const products = Object.fromEntries(LIVE_DATA_PRODUCTS.map((product) => [product.key, product]));
       const layers = {};
       layers.current = createGridLayerFromLive(json, products.current, { uCurrent: "u_current", vCurrent: "v_current" }, json.times?.current);
@@ -1286,8 +1440,14 @@
       Object.keys(layers).forEach((key) => {
         if (!layers[key].validCount) delete layers[key];
       });
+      const presetKey = options.presetKey || json.presetKey || state.scenarioPreset || "latest";
       const data = {
-        source: "GitHub Actions live JSON",
+        source: json.source || SCENARIO_PRESETS[presetKey]?.source || "GitHub Actions live JSON",
+        presetKey,
+        sceneLabel: json.sceneLabel || SCENARIO_PRESETS[presetKey]?.label || "",
+        sceneDate: json.sceneDate || "",
+        dataType: json.dataType || SCENARIO_PRESETS[presetKey]?.dataType || "",
+        timeModeLabel: json.timeModeLabel || "",
         requestUrl: json.__requestUrl || LIVE_DATA_URLS[0],
         generatedAt: json.generatedAt,
         layers,
@@ -1307,7 +1467,8 @@
         requestUrl: layer.requestUrl,
         variables: layer.fields.join(", "),
         units: layer.units,
-        description: layer.description
+        description: layer.description,
+        dataType: layer.dataType
       }));
       data.time = data.sources.map((s) => s.time).filter(Boolean).join(" / ");
       return data;
@@ -1350,9 +1511,10 @@
     }
 
     function buildScenarioStatusText(data) {
-      const loaded = data.sources.map((s) => `${shortLayerName(s.key)} ${formatApiTime(s.time)}`).join("；");
+      const label = data.presetKey === "latest" ? "最新公开数据" : `${data.sceneLabel}${data.sceneDate ? ` ${data.sceneDate}` : ""}`;
+      const loaded = data.sources.map((s) => `${shortLayerName(s.key)} ${formatApiTime(s.time, s.dataType || data.dataType)}`).join("；");
       const failed = data.errors.length ? `；未加载：${data.errors.map((e) => shortLayerName(e.key)).join("、")}` : "";
-      return `已加载 GitHub Actions 预处理公开数据：${loaded}${failed}。粒子动画使用真实 u/v 方向并做视觉加速。`;
+      return `已加载 ${label}：${loaded}${failed}。粒子动画使用真实 u/v 方向并做视觉加速。`;
     }
 
     function buildScenarioVisuals() {
@@ -1845,7 +2007,7 @@
       if (state.mode !== "scenario") return;
       const atmosphereUnavailable = ui.showAtmosphere.checked && state.scenarioData && !hasActiveFlowData(FLOW_FIELD_PROFILES.atmosphere);
       ui.scenarioMessage.textContent = atmosphereUnavailable
-        ? "风场暂不可用：当前实时 JSON 没有可用的 GFS 10m wind 图层。"
+        ? "风场暂不可用：当前情境 JSON 没有可用的 10m wind 图层。"
         : state.scenarioMessage || "尚未加载实时数据。";
       ui.scenarioMessage.className = state.scenarioFailed || atmosphereUnavailable ? "error" : state.scenarioData ? "ok" : "";
       ui.fallbackNote.textContent = state.scenarioFallbackMessage || "调用按钮会在新窗口打开 earth.nullschool；刷新会重新读取 NOAA 公开源。";
@@ -1853,7 +2015,7 @@
 
     function renderSources() {
       const scenarioSources = state.scenarioData?.sources?.map((source) => `
-        <p><b>${escapeHtml(source.label)}：</b>${escapeHtml(source.description)} 变量 ${escapeHtml(source.variables)}，单位 ${escapeHtml(source.units)}，时间 ${escapeHtml(formatApiTime(source.time))}，网格 ${escapeHtml(source.grid)}，有效格点 ${source.validCount}。<a href="${source.page}" target="_blank" rel="noreferrer">数据说明</a></p>
+        <p><b>${escapeHtml(source.label)}：</b>${escapeHtml(source.description)} 变量 ${escapeHtml(source.variables)}，单位 ${escapeHtml(source.units)}，时间 ${escapeHtml(formatApiTime(source.time, source.dataType || state.scenarioData?.dataType))}，网格 ${escapeHtml(source.grid)}，有效格点 ${source.validCount}。<a href="${source.page}" target="_blank" rel="noreferrer">数据说明</a></p>
       `).join("") || "<p><b>情境模式：</b>尚未成功加载 GitHub Actions 远程 JSON 数据。</p>";
       const scenarioErrors = state.scenarioErrors?.length
         ? `<p><b>未加载图层：</b>${state.scenarioErrors.map((err) => `${escapeHtml(err.label)}：${escapeHtml(err.message)}`).join("；")}</p>`
@@ -1882,18 +2044,20 @@
         { label: "Three.js / OrbitControls", ...state.resourceStatus.runtime },
         { label: "地球贴图", ...state.resourceStatus.texture },
         {
-          label: "GitHub Pages live JSON",
+          label: state.scenarioPreset === "latest" ? "GitHub Pages live JSON" : "GitHub Pages seasonal JSON",
           status: state.resourceStatus.liveData?.status || "pending",
           message: state.resourceStatus.liveData?.message || "尚未请求。",
           time: state.resourceStatus.liveData?.time,
-          url: state.resourceStatus.liveData?.requestUrl || LIVE_DATA_URLS[0],
-          page: state.resourceStatus.liveData?.requestUrl || LIVE_DATA_URLS[0]
+          dataType: state.scenarioData?.dataType,
+          url: state.resourceStatus.liveData?.requestUrl || (state.scenarioPreset === "latest" ? LIVE_DATA_URLS[0] : SEASONAL_DATA_URLS[0]),
+          page: state.resourceStatus.liveData?.requestUrl || (state.scenarioPreset === "latest" ? LIVE_DATA_URLS[0] : SEASONAL_DATA_URLS[0])
         },
         ...LIVE_DATA_PRODUCTS.map((source) => ({
           label: source.label,
           status: state.scenarioData?.layers?.[source.key] ? "ok" : state.scenarioLoading ? "loading" : "pending",
-          message: state.scenarioData?.layers?.[source.key] ? "已由远程 JSON 提供。" : "等待 live JSON 中的图层。",
+          message: state.scenarioData?.layers?.[source.key] ? "已由远程 JSON 提供。" : "等待情境 JSON 中的图层。",
           time: state.scenarioData?.layers?.[source.key]?.time,
+          dataType: state.scenarioData?.layers?.[source.key]?.dataType || source.dataType,
           url: state.scenarioData?.layers?.[source.key]?.page || LIVE_DATA_URLS[0],
           page: state.scenarioData?.layers?.[source.key]?.page || LIVE_DATA_URLS[0]
         }))
@@ -1901,7 +2065,7 @@
       return `
         <p><b>在线资源状态：</b>${items.map((item) => {
           const link = item.page || item.url;
-          const time = item.time ? `；时间 ${escapeHtml(formatApiTime(item.time))}` : "";
+          const time = item.time ? `；时间 ${escapeHtml(formatApiTime(item.time, item.dataType || state.scenarioData?.dataType))}` : "";
           const urlText = item.url ? `；请求 ${escapeHtml(shortenUrl(item.url))}` : "";
           const target = link ? ` <a href="${escapeHtml(link)}" target="_blank" rel="noreferrer">链接</a>` : "";
           return `<span>${escapeHtml(item.label)} [${badge(item.status)}] ${escapeHtml(item.message || "")}${time}${urlText}${target}</span>`;
@@ -2375,7 +2539,7 @@
 
     function formatScenarioTimes(data) {
       if (!data?.sources?.length) return "--";
-      return data.sources.map((source) => `${shortLayerName(source.key)} ${formatApiTime(source.time)}`).join(" / ");
+      return data.sources.map((source) => `${shortLayerName(source.key)} ${formatApiTime(source.time, source.dataType || data.dataType)}`).join(" / ");
     }
 
     function formatScenarioGrids(data) {
@@ -2441,15 +2605,25 @@
       return text.length > 120 ? `${text.slice(0, 110)}...` : text;
     }
 
-    function formatApiTime(value) {
+    function formatDataTypeLabel(dataType) {
+      if (dataType === "historical") return "历史固定日期";
+      if (dataType === "lagged") return "源站滞后数据";
+      if (dataType === "live") return "实时/近实时";
+      return "";
+    }
+
+    function formatApiTime(value, dataType = "") {
       if (!value) return "--";
       const parsed = Date.parse(value);
       const text = value.replace("T", " ").replace("Z", " UTC");
+      const mode = formatDataTypeLabel(dataType);
+      if (dataType === "historical") return mode ? `${text}，${mode}` : text;
       if (!Number.isFinite(parsed)) return text;
       const ageDays = Math.floor((Date.now() - parsed) / 86400000);
       if (ageDays > 1) return `${text}，滞后约 ${ageDays} 天`;
       if (ageDays === 1) return `${text}，滞后约 1 天`;
       if (ageDays < -1) return `${text}，源站时间晚于本机`;
+      if (mode) return `${text}，${mode}`;
       return text;
     }
 
