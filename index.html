@@ -353,9 +353,45 @@
       background: rgba(3, 14, 25, 0.88);
       backdrop-filter: blur(10px);
       box-shadow: 0 14px 40px rgba(0, 0, 0, 0.42);
+      transition: opacity 200ms ease, transform 200ms ease;
     }
 
     #fallbackDock[hidden] {
+      display: none;
+    }
+
+    #fallbackDock.collapsed {
+      opacity: 0;
+      transform: translateX(-100%);
+      pointer-events: none;
+    }
+
+    #fallbackToggle {
+      position: fixed;
+      left: 14px;
+      bottom: 58px;
+      z-index: 19;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(255, 141, 86, 0.92);
+      border: 1px solid rgba(255, 180, 120, 0.6);
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(255, 141, 86, 0.4);
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    #fallbackToggle:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(255, 141, 86, 0.6);
+    }
+
+    #fallbackToggle[hidden] {
       display: none;
     }
 
@@ -588,11 +624,12 @@
     </div>
   </aside>
 
-  <div id="fallbackDock" hidden>
+  <button id="fallbackToggle" type="button" title="显示/隐藏操作按钮" hidden>!</button>
+  <div id="fallbackDock" class="collapsed" hidden>
     <button id="callNullschool" type="button">调用</button>
     <button id="reloadLive" type="button">刷新</button>
     <button id="backTeaching" type="button">返回教学</button>
-    <span id="fallbackNote">调用按钮会在新窗口打开 earth.nullschool，本页不抓取其内部接口。</span>
+    <span id="fallbackNote">调用按钮会在新窗口打开 earth.nullschool,本页不抓取其内部接口。</span>
   </div>
 
   <button id="sourceToggle" type="button">数据来源</button>
@@ -774,6 +811,7 @@
       oceanDesc: document.getElementById("oceanDesc"),
       currentName: document.getElementById("currentName"),
       currentDesc: document.getElementById("currentDesc"),
+      fallbackToggle: document.getElementById("fallbackToggle"),
       fallbackDock: document.getElementById("fallbackDock"),
       callNullschool: document.getElementById("callNullschool"),
       reloadLive: document.getElementById("reloadLive"),
@@ -1083,6 +1121,11 @@
         ui.hudToggle.setAttribute("aria-expanded", String(!collapsed));
       });
 
+      ui.fallbackToggle.addEventListener("click", () => {
+        const collapsed = ui.fallbackDock.classList.contains("collapsed");
+        ui.fallbackDock.classList.toggle("collapsed", !collapsed);
+      });
+
       [ui.modeTeaching, ui.hudTeaching].forEach((btn) => btn.addEventListener("click", () => setMode("teaching")));
       [ui.modeScenario, ui.hudScenario].forEach((btn) => btn.addEventListener("click", () => setMode("scenario")));
       [
@@ -1177,6 +1220,7 @@
       ui.scenarioPanel.hidden = !scenario;
       map2dWrap.hidden = !twoD;
       document.body.classList.toggle("view-2d", twoD);
+      ui.fallbackToggle.hidden = !scenario;
       ui.fallbackDock.hidden = !scenario;
       ui.modeText.textContent = scenario ? "情境模式 · 实时公开数据" : `教学模式 · ${state.teachingView.toUpperCase()}`;
       ui.modeHint.textContent = scenario
