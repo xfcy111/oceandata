@@ -47,3 +47,47 @@ jobs:
             git commit -m "Update live ocean data"
             git push
           fi
+
+      - name: Clean old commits (keep last 6)
+        run: |
+          # 获取所有 "Update live ocean data" 提交的数量
+          COMMIT_COUNT=$(git log --oneline --grep="Update live ocean data" | wc -l)
+          echo "当前数据更新提交总数: $COMMIT_COUNT"
+          
+          # 如果提交数超过 6 条，则进行清理
+          if [ $COMMIT_COUNT -gt 6 ]; then
+            echo "提交数超过 6 条，开始清理旧提交..."
+            
+            # 找到第 6 条 "Update live ocean data" 提交的 hash
+            SIXTH_COMMIT=$(git log --oneline --grep="Update live ocean data" | sed -n '6p' | awk '{print $1}')
+            echo "第 6 条提交 hash: $SIXTH_COMMIT"
+            
+            # 找到第 6 条提交之前的第一个非数据更新提交（作为新的基础）
+            BASE_COMMIT=$(git log --oneline $SIXTH_COMMIT~1 --grep="Update live ocean data" --invert-grep | head -n 1 | awk '{print $1}')
+            
+            if [ -z "$BASE_COMMIT" ]; then
+              # 如果没有找到非数据更新提交，使用第 7 条数据更新提交作为基础
+              BASE_COMMIT=$(git log --oneline --grep="Update live ocean data" | sed -n '7p' | awk '{print $1}')
+            fi
+            
+            echo "基础提交 hash: $BASE_COMMIT"
+            
+            # 创建一个临时分支保存最近 6 条提交
+            git checkout -b temp-branch
+            
+            # 重置到基础提交
+            git reset --hard $BASE_COMMIT
+            
+            # 将最近 6 条提交逐个 cherry-pick 过来
+            RECENT_COMMITS=$(git log --oneline --grep="Update live ocean data" origin/main | head -n 6 | tac | awk '{print $1}')
+            for commit in $RECENT_COMMITS; do
+              git cherry-pick $commit || git cherry-pick --continue
+            done
+            
+            # 强制推送到 main 分支
+            git push origin temp-branch:main --force
+            
+            echo "清理完成，已保留最近 6 条数据更新提交"
+          else
+            echo "提交数未超过 6 条，无需清理"
+          fi
